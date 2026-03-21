@@ -1,8 +1,10 @@
 /target
 .DS_Store
 .claude/
+.planning/
 .vscode/
+copilot-instructions.md
 context/
-docs/superpowers/plans/
+docs/superpowers/
 prompt.md
 tmp/
