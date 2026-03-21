@@ -12,7 +12,10 @@ pub fn rom_bytes(program: &[(u16, u8)], reset: u16, nmi: u16, irq: u16) -> Vec<u
 
     let mut prg = vec![0xEA; 0x8000];
     for (addr, value) in program {
-        assert!((*addr as usize) >= 0x8000, "program bytes must live in cartridge space");
+        assert!(
+            (*addr as usize) >= 0x8000,
+            "program bytes must live in cartridge space"
+        );
         prg[*addr as usize - 0x8000] = *value;
     }
 
@@ -29,7 +32,8 @@ pub fn rom_bytes(program: &[(u16, u8)], reset: u16, nmi: u16, irq: u16) -> Vec<u
 }
 
 pub fn cartridge_from_program(program: &[(u16, u8)], reset: u16, nmi: u16, irq: u16) -> Cartridge {
-    load_cartridge_from_bytes(&rom_bytes(program, reset, nmi, irq)).expect("fixture cartridge should build")
+    load_cartridge_from_bytes(&rom_bytes(program, reset, nmi, irq))
+        .expect("fixture cartridge should build")
 }
 
 pub fn console_from_program(program: &[(u16, u8)], reset: u16) -> Console {
@@ -40,7 +44,8 @@ pub fn console_from_program(program: &[(u16, u8)], reset: u16) -> Console {
 
 pub fn write_rom(path: impl AsRef<Path>, program: &[(u16, u8)], reset: u16) -> PathBuf {
     let path = path.as_ref().to_path_buf();
-    std::fs::write(&path, rom_bytes(program, reset, reset, reset)).expect("fixture ROM should write");
+    std::fs::write(&path, rom_bytes(program, reset, reset, reset))
+        .expect("fixture ROM should write");
     path
 }
 

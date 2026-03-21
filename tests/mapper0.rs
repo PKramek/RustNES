@@ -1,4 +1,6 @@
-use RustNES::core::cartridge::{parse_ines_rom, load_cartridge_from_bytes, Cartridge, CartridgeError};
+use RustNES::core::cartridge::{
+    Cartridge, CartridgeError, load_cartridge_from_bytes, parse_ines_rom,
+};
 
 fn build_ines_rom(prg_banks: u8, chr_banks: u8) -> Vec<u8> {
     let mut bytes = vec![b'N', b'E', b'S', 0x1A, prg_banks, chr_banks, 0, 0];
@@ -59,9 +61,7 @@ fn unsupported_mapper_remains_strictly_rejected() {
     let mut rom = build_ines_rom(1, 1);
     rom[6] = 0x10;
 
-    let error = load_cartridge_from_bytes(&rom)
-        .err()
-        .expect("unsupported mapper must fail");
+    let error = load_cartridge_from_bytes(&rom).expect_err("unsupported mapper must fail");
     assert_eq!(
         error,
         CartridgeError::UnsupportedMapper {

@@ -10,7 +10,7 @@ use anyhow::Result;
 
 pub use app::{App, AppState, LoadFailure, LoadedSession, OpenRomOutcome};
 pub use launcher::Launcher;
-pub use load_rom::{load_rom_from_path, LoadRomError, LoadedRom};
+pub use load_rom::{LoadRomError, LoadedRom, load_rom_from_path};
 pub use trace::TraceOptions;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

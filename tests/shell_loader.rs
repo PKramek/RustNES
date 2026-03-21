@@ -4,7 +4,10 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use RustNES::core::cartridge::CartridgeError;
-use RustNES::shell::{initial_rom_arg, load_rom_from_path, AppState, BootOptions, Launcher, LoadRomError, OpenRomOutcome};
+use RustNES::shell::{
+    AppState, BootOptions, Launcher, LoadRomError, OpenRomOutcome, initial_rom_arg,
+    load_rom_from_path,
+};
 
 fn unique_rom_path(name: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -43,9 +46,7 @@ fn successful_path_based_load_returns_metadata_and_cartridge() {
 fn parser_diagnostic_propagation_stays_structured() {
     let path = write_rom_fixture("invalid-magic", &[0, 1, 2, 3]);
 
-    let error = load_rom_from_path(&path)
-        .err()
-        .expect("invalid ROM should fail");
+    let error = load_rom_from_path(&path).expect_err("invalid ROM should fail");
 
     match error {
         LoadRomError::Cartridge {
@@ -63,9 +64,7 @@ fn parser_diagnostic_propagation_stays_structured() {
 fn unsupported_mapper_message_is_detailed_and_calm() {
     let path = write_rom_fixture("unsupported-mapper", &build_ines_rom(1, 1, 0x10, 0));
 
-    let error = load_rom_from_path(&path)
-        .err()
-        .expect("unsupported mapper should fail");
+    let error = load_rom_from_path(&path).expect_err("unsupported mapper should fail");
     let message = error.diagnostic_message();
 
     assert!(message.contains("unsupported mapper 1"));
@@ -107,11 +106,9 @@ fn launcher_requires_confirmation_before_replacing_loaded_rom() {
 
 #[test]
 fn cli_boot_argument_reuses_the_same_initial_rom_path_parsing() {
-    let args = vec![
-        OsString::from("rustnes"),
-        OsString::from("example.nes"),
-    ];
+    let args = vec![OsString::from("rustnes"), OsString::from("example.nes")];
 
-    let initial = initial_rom_arg(args).expect("second positional arg should be treated as initial ROM");
+    let initial =
+        initial_rom_arg(args).expect("second positional arg should be treated as initial ROM");
     assert_eq!(initial, PathBuf::from("example.nes"));
 }

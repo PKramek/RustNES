@@ -42,7 +42,11 @@ fn read_u16_zero_page(bus: &mut impl CpuBus, base: u8) -> u16 {
 }
 
 impl Cpu {
-    pub(crate) fn resolve_operand(&self, bus: &mut impl CpuBus, mode: AddressingMode) -> ResolvedOperand {
+    pub(crate) fn resolve_operand(
+        &self,
+        bus: &mut impl CpuBus,
+        mode: AddressingMode,
+    ) -> ResolvedOperand {
         match mode {
             AddressingMode::Implied => ResolvedOperand::default(),
             AddressingMode::Accumulator => ResolvedOperand {

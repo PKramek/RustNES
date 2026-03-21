@@ -77,8 +77,10 @@ pub fn load_cartridge_from_bytes(bytes: &[u8]) -> Result<Cartridge, CartridgeErr
 }
 
 pub fn load_cartridge_from_path(path: impl AsRef<Path>) -> Result<Cartridge, CartridgeError> {
-    let bytes = std::fs::read(path.as_ref()).map_err(|error| CartridgeError::UnsupportedCartridgeLayout {
-        reason: format!("unable to read ROM file: {error}"),
+    let bytes = std::fs::read(path.as_ref()).map_err(|error| {
+        CartridgeError::UnsupportedCartridgeLayout {
+            reason: format!("unable to read ROM file: {error}"),
+        }
     })?;
 
     load_cartridge_from_bytes(&bytes)

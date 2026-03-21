@@ -1,0 +1,56 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  validation-and-testing:
+    name: Validation and Testing
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2432d0b54c86be510cb1d4f2ea0e0600d8
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@efa25f75e744ec10f063a5aa8b6eb0ff4b715206
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@c1937119777bd3685bba43864a761ec8d9bb644b
+        with:
+          shared-key: rustnes-ci
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install Cargo tooling
+        uses: taiki-e/install-action@e24b8b706c4b2e8c6ceef7a92fb4eebfaaf033ce
+        with:
+          tool: cargo-nextest@0.9.132, cargo-deny@0.19.0, cargo-machete@0.9.1
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check unused dependencies
+        run: cargo machete
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run cargo-deny
+        run: cargo deny check
+
+      - name: Run tests
+        run: cargo nextest run --all-targets --all-features

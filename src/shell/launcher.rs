@@ -23,7 +23,11 @@ impl Launcher {
         self.app.state()
     }
 
-    pub fn open_path_with_confirmation<F>(&mut self, path: PathBuf, confirm_replace: F) -> OpenRomOutcome
+    pub fn open_path_with_confirmation<F>(
+        &mut self,
+        path: PathBuf,
+        confirm_replace: F,
+    ) -> OpenRomOutcome
     where
         F: FnOnce(&LoadedRom, &Path) -> bool,
     {
@@ -36,7 +40,9 @@ impl Launcher {
 
     #[allow(dead_code)]
     pub fn pick_rom_path() -> Option<PathBuf> {
-        FileDialog::new().add_filter("NES ROM", &["nes"]).pick_file()
+        FileDialog::new()
+            .add_filter("NES ROM", &["nes"])
+            .pick_file()
     }
 
     #[allow(dead_code)]

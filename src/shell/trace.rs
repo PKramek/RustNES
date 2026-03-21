@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
-use anyhow::{Context, bail, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::core::console::Console;
 use crate::core::cpu::format_trace_line;
@@ -31,14 +31,21 @@ impl TraceOptions {
         while let Some(arg) = iter.next() {
             match arg.to_str() {
                 Some("--pc") => {
-                    let value = iter.next().ok_or_else(|| anyhow::anyhow!("missing value for --pc"))?;
+                    let value = iter
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("missing value for --pc"))?;
                     start_pc = Some(parse_hex_u16(&value.to_string_lossy())?);
                 }
                 Some("--output") => {
-                    output = Some(PathBuf::from(iter.next().ok_or_else(|| anyhow::anyhow!("missing value for --output"))?));
+                    output =
+                        Some(PathBuf::from(iter.next().ok_or_else(|| {
+                            anyhow::anyhow!("missing value for --output")
+                        })?));
                 }
                 Some("--max-instructions") => {
-                    let value = iter.next().ok_or_else(|| anyhow::anyhow!("missing value for --max-instructions"))?;
+                    let value = iter
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("missing value for --max-instructions"))?;
                     max_instructions = Some(value.to_string_lossy().parse()?);
                 }
                 Some(flag) if flag.starts_with("--") => bail!("unsupported trace flag: {flag}"),
@@ -92,7 +99,11 @@ fn parse_hex_u16(text: &str) -> Result<u16> {
     Ok(u16::from_str_radix(normalized, 16)?)
 }
 
-fn emit_trace(writer: &mut impl Write, console: &mut Console, max_instructions: Option<usize>) -> Result<()> {
+fn emit_trace(
+    writer: &mut impl Write,
+    console: &mut Console,
+    max_instructions: Option<usize>,
+) -> Result<()> {
     let limit = max_instructions.unwrap_or(10_000);
     for _ in 0..limit {
         let record = console.step_instruction()?;

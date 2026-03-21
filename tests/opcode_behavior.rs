@@ -7,11 +7,23 @@ use support::console_from_program;
 
 #[test]
 fn zero_page_indexing_wraps_and_loads_expected_value() {
-    let mut console = console_from_program(&[(0xC000, 0xA2), (0xC001, 0x01), (0xC002, 0xB5), (0xC003, 0xFF)], 0xC000);
+    let mut console = console_from_program(
+        &[
+            (0xC000, 0xA2),
+            (0xC001, 0x01),
+            (0xC002, 0xB5),
+            (0xC003, 0xFF),
+        ],
+        0xC000,
+    );
     console.bus_mut().write(0x0000, 0x42);
 
-    console.step_instruction().expect("LDX immediate should execute");
-    let record = console.step_instruction().expect("LDA zero-page,X should execute");
+    console
+        .step_instruction()
+        .expect("LDX immediate should execute");
+    let record = console
+        .step_instruction()
+        .expect("LDA zero-page,X should execute");
 
     assert_eq!(record.operand_addr, Some(0x0000));
     assert_eq!(console.cpu().a, 0x42);
@@ -21,13 +33,23 @@ fn zero_page_indexing_wraps_and_loads_expected_value() {
 #[test]
 fn absolute_index_load_adds_page_cross_cycle() {
     let mut console = console_from_program(
-        &[(0xC000, 0xA2), (0xC001, 0x01), (0xC002, 0xBD), (0xC003, 0xFF), (0xC004, 0x01)],
+        &[
+            (0xC000, 0xA2),
+            (0xC001, 0x01),
+            (0xC002, 0xBD),
+            (0xC003, 0xFF),
+            (0xC004, 0x01),
+        ],
         0xC000,
     );
     console.bus_mut().write(0x0200, 0x77);
 
-    console.step_instruction().expect("LDX immediate should execute");
-    let record = console.step_instruction().expect("LDA absolute,X should execute");
+    console
+        .step_instruction()
+        .expect("LDX immediate should execute");
+    let record = console
+        .step_instruction()
+        .expect("LDA absolute,X should execute");
 
     assert!(record.page_crossed);
     assert_eq!(console.cpu().a, 0x77);
@@ -36,10 +58,14 @@ fn absolute_index_load_adds_page_cross_cycle() {
 
 #[test]
 fn branch_timing_distinguishes_taken_and_cross_page_cases() {
-    let mut not_taken = console_from_program(&[(0xC000, 0xF0), (0xC001, 0x02), (0xC002, 0xEA)], 0xC000);
+    let mut not_taken =
+        console_from_program(&[(0xC000, 0xF0), (0xC001, 0x02), (0xC002, 0xEA)], 0xC000);
     let not_taken_record = not_taken.step_instruction().expect("BEQ should execute");
     assert_eq!(not_taken.cpu().pc, 0xC002);
-    assert_eq!(not_taken_record.cycles_used(not_taken.cpu().total_cycles), 2);
+    assert_eq!(
+        not_taken_record.cycles_used(not_taken.cpu().total_cycles),
+        2
+    );
 
     let mut taken = console_from_program(&[(0xC0FD, 0xD0), (0xC0FE, 0x02), (0xC101, 0xEA)], 0xC0FD);
     let taken_record = taken.step_instruction().expect("BNE should execute");
@@ -108,12 +134,15 @@ fn jsr_and_rts_restore_control_flow() {
 
 #[test]
 fn indirect_jmp_uses_6502_page_wrap_bug() {
-    let mut console = console_from_program(&[(0xC000, 0x6C), (0xC001, 0xFF), (0xC002, 0x10)], 0xC000);
+    let mut console =
+        console_from_program(&[(0xC000, 0x6C), (0xC001, 0xFF), (0xC002, 0x10)], 0xC000);
     console.bus_mut().write(0x10FF, 0x34);
     console.bus_mut().write(0x1000, 0x12);
     console.bus_mut().write(0x1100, 0xAB);
 
-    console.step_instruction().expect("JMP indirect should execute");
+    console
+        .step_instruction()
+        .expect("JMP indirect should execute");
 
     assert_eq!(console.cpu().pc, 0x1234);
 }

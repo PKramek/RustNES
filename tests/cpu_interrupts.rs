@@ -17,7 +17,10 @@ fn php_and_plp_round_trip_ignores_break_bit_on_restore() {
     console.cpu_mut().status = STATUS_CARRY;
 
     console.step_instruction().expect("PHP should execute");
-    assert_eq!(console.bus_mut().read(0x01FD), STATUS_CARRY | STATUS_BREAK | STATUS_UNUSED);
+    assert_eq!(
+        console.bus_mut().read(0x01FD),
+        STATUS_CARRY | STATUS_BREAK | STATUS_UNUSED
+    );
 
     console.cpu_mut().status = 0;
     console.step_instruction().expect("PLP should execute");

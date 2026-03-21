@@ -30,11 +30,14 @@ fn nestest_style_trace_matches_the_checked_in_golden_log() {
 
     let mut lines = Vec::new();
     for _ in 0..6 {
-        let record = console.step_instruction().expect("trace ROM should execute");
+        let record = console
+            .step_instruction()
+            .expect("trace ROM should execute");
         lines.push(format_trace_line(&record));
     }
 
     let actual = lines.join("\n") + "\n";
-    let expected = std::fs::read_to_string("tests/roms/nestest.log").expect("golden log should exist");
+    let expected =
+        std::fs::read_to_string("tests/roms/nestest.log").expect("golden log should exist");
     assert_eq!(actual, expected);
 }

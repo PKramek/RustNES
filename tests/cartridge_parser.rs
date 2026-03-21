@@ -1,4 +1,6 @@
-use RustNES::core::cartridge::{load_cartridge_from_bytes, parse_ines_rom, CartridgeError, ChrStorage, Mirroring};
+use RustNES::core::cartridge::{
+    CartridgeError, ChrStorage, Mirroring, load_cartridge_from_bytes, parse_ines_rom,
+};
 
 fn build_ines_rom(prg_banks: u8, chr_banks: u8, flags6: u8, flags7: u8) -> Vec<u8> {
     let mut bytes = vec![b'N', b'E', b'S', 0x1A, prg_banks, chr_banks, flags6, flags7];
@@ -45,7 +47,13 @@ fn invalid_magic_maps_to_typed_error_variant() {
     let rom = vec![0, 1, 2, 3];
     let error = parse_ines_rom(&rom).expect_err("invalid magic must fail");
 
-    assert_eq!(error, CartridgeError::TruncatedRom { expected: 16, actual: 4 });
+    assert_eq!(
+        error,
+        CartridgeError::TruncatedRom {
+            expected: 16,
+            actual: 4
+        }
+    );
 }
 
 #[test]
@@ -53,7 +61,10 @@ fn nes2_header_is_rejected() {
     let rom = build_ines_rom(1, 1, 0, 0b0000_1000);
     let error = parse_ines_rom(&rom).expect_err("NES 2.0 should be out of scope");
 
-    assert_eq!(error, CartridgeError::UnsupportedFormat { format: "NES 2.0" });
+    assert_eq!(
+        error,
+        CartridgeError::UnsupportedFormat { format: "NES 2.0" }
+    );
 }
 
 #[test]
@@ -65,7 +76,7 @@ fn truncated_payload_is_rejected() {
     assert_eq!(
         error,
         CartridgeError::TruncatedRom {
-            expected: 16 + (2 * 0x4000) + (1 * 0x2000),
+            expected: 16 + (2 * 0x4000) + 0x2000,
             actual: rom.len(),
         }
     );
@@ -80,7 +91,9 @@ fn dirty_header_is_rejected() {
     assert_eq!(
         error,
         CartridgeError::DirtyHeader {
-            reason: String::from("header padding bytes 12-15 must be zeroed for strict iNES 1.0 parsing"),
+            reason: String::from(
+                "header padding bytes 12-15 must be zeroed for strict iNES 1.0 parsing"
+            ),
         }
     );
 }
@@ -88,9 +101,7 @@ fn dirty_header_is_rejected() {
 #[test]
 fn unsupported_mapper_is_rejected_after_parse() {
     let rom = build_ines_rom(1, 1, 0x10, 0);
-    let error = load_cartridge_from_bytes(&rom)
-        .err()
-        .expect("unsupported mapper must fail");
+    let error = load_cartridge_from_bytes(&rom).expect_err("unsupported mapper must fail");
 
     assert_eq!(
         error,

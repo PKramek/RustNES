@@ -25,7 +25,9 @@ impl PpuMemory {
     pub fn read(&self, addr: u16, cartridge: &Cartridge) -> u8 {
         match addr & 0x3FFF {
             0x0000..=0x1FFF => cartridge.ppu_read(addr),
-            0x2000..=0x3EFF => self.nametable_ram[self.nametable_index(addr, cartridge.mirroring())],
+            0x2000..=0x3EFF => {
+                self.nametable_ram[self.nametable_index(addr, cartridge.mirroring())]
+            }
             0x3F00..=0x3FFF => self.palette_ram[palette_index(addr)],
             _ => 0,
         }

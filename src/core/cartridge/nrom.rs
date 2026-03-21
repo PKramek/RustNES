@@ -11,7 +11,9 @@ impl Mapper0 {
         let prg_len = image.prg_rom.len();
         if prg_len != 0x4000 && prg_len != 0x8000 {
             return Err(CartridgeError::UnsupportedCartridgeLayout {
-                reason: format!("Mapper 0 requires 16 KiB or 32 KiB PRG-ROM, found {prg_len} bytes"),
+                reason: format!(
+                    "Mapper 0 requires 16 KiB or 32 KiB PRG-ROM, found {prg_len} bytes"
+                ),
             });
         }
 
@@ -24,7 +26,10 @@ impl Mapper0 {
         match &image.chr {
             ChrStorage::Rom(chr) if chr.len() != 0x2000 => {
                 return Err(CartridgeError::UnsupportedCartridgeLayout {
-                    reason: format!("Mapper 0 expects 8 KiB CHR-ROM when CHR-ROM is present, found {} bytes", chr.len()),
+                    reason: format!(
+                        "Mapper 0 expects 8 KiB CHR-ROM when CHR-ROM is present, found {} bytes",
+                        chr.len()
+                    ),
                 });
             }
             ChrStorage::Ram(_) | ChrStorage::Rom(_) => {}
@@ -67,10 +72,10 @@ impl Mapper for Mapper0 {
     }
 
     fn ppu_write(&mut self, addr: u16, value: u8) {
-        if let 0x0000..=0x1FFF = addr {
-            if let ChrStorage::Ram(chr) = &mut self.chr {
-                chr[addr as usize] = value;
-            }
+        if let 0x0000..=0x1FFF = addr
+            && let ChrStorage::Ram(chr) = &mut self.chr
+        {
+            chr[addr as usize] = value;
         }
     }
 

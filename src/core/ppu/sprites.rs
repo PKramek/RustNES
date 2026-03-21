@@ -40,7 +40,11 @@ pub fn compose_sprites(
                 continue;
             }
 
-            let pattern_row = if attr & ATTR_FLIP_VERTICAL != 0 { 7 - row } else { row };
+            let pattern_row = if attr & ATTR_FLIP_VERTICAL != 0 {
+                7 - row
+            } else {
+                row
+            };
             let pattern_addr = pattern_base + (tile as u16) * 16 + pattern_row as u16;
             let low_plane = memory.peek(pattern_addr, cartridge);
             let high_plane = memory.peek(pattern_addr + 8, cartridge);
@@ -68,7 +72,9 @@ pub fn compose_sprites(
                     sprite_zero_hit = true;
                 }
 
-                if attr & ATTR_PRIORITY_BEHIND_BACKGROUND != 0 && background_opaque[framebuffer_index] {
+                if attr & ATTR_PRIORITY_BEHIND_BACKGROUND != 0
+                    && background_opaque[framebuffer_index]
+                {
                     continue;
                 }
 

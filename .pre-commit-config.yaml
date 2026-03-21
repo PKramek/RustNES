@@ -1,0 +1,55 @@
+default_install_hook_types: [pre-commit, pre-push]
+fail_fast: true
+
+repos:
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: Rust Formatter
+        description: Enforce canonical formatting before commits.
+        entry: cargo fmt --all -- --check
+        language: system
+        always_run: true
+        types: [rust]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: clippy
+        name: Rust Clippy Linter
+        description: Reject warnings before commits.
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        always_run: true
+        types: [rust]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: cargo-machete
+        name: Unused Dependency Check
+        description: Detect unused direct Cargo dependencies before commits.
+        entry: cargo machete
+        language: system
+        always_run: true
+        types: [rust, toml]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: cargo-nextest
+        name: Nextest Suite
+        description: Run the full test suite before pushes.
+        entry: cargo nextest run --all-targets --all-features
+        language: system
+        always_run: true
+        types: [rust]
+        stages: [pre-push]
+        pass_filenames: false
+
+      - id: cargo-deny
+        name: Supply Chain Audit
+        description: Check vulnerabilities, licenses, bans, and crate sources before pushes.
+        entry: cargo deny check
+        language: system
+        always_run: true
+        types: [rust, toml]
+        stages: [pre-push]
+        pass_filenames: false

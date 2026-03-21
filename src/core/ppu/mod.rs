@@ -1,18 +1,18 @@
 mod memory;
-mod render;
 mod registers;
+mod render;
 mod sprites;
 
 use crate::core::cartridge::Cartridge;
 
 use memory::PpuMemory;
-use render::render_background_frame;
 use registers::PpuRegisters;
-use sprites::compose_sprites;
 pub use registers::{
     CTRL_NMI_ENABLE, CTRL_VRAM_INCREMENT, STATUS_SPRITE_OVERFLOW, STATUS_SPRITE_ZERO_HIT,
     STATUS_VBLANK,
 };
+use render::render_background_frame;
+use sprites::compose_sprites;
 
 pub const SCREEN_WIDTH: usize = 256;
 pub const SCREEN_HEIGHT: usize = 240;
@@ -295,7 +295,11 @@ impl Ppu {
     }
 
     fn increment_vram_addr(&mut self) {
-        self.registers.v = self.registers.v.wrapping_add(self.registers.vram_increment()) & 0x3FFF;
+        self.registers.v = self
+            .registers
+            .v
+            .wrapping_add(self.registers.vram_increment())
+            & 0x3FFF;
     }
 
     fn current_scroll_event(&self, scanline: usize) -> ScrollEvent {

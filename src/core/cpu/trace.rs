@@ -37,7 +37,12 @@ pub fn format_trace_line(record: &StepRecord) -> String {
 
 fn format_bytes(record: &StepRecord) -> String {
     let mut bytes = String::new();
-    for (index, value) in record.bytes.iter().enumerate().take(record.byte_len as usize) {
+    for (index, value) in record
+        .bytes
+        .iter()
+        .enumerate()
+        .take(record.byte_len as usize)
+    {
         if index > 0 {
             bytes.push(' ');
         }
@@ -57,13 +62,19 @@ fn format_operand(mode: AddressingMode, record: &StepRecord) -> String {
         },
         AddressingMode::ZeroPageX => match (record.operand_addr, record.operand_value) {
             (Some(addr), Some(value)) => {
-                format!("${:02X},X @ {:02X} = {:02X}", record.bytes[1], addr as u8, value)
+                format!(
+                    "${:02X},X @ {:02X} = {:02X}",
+                    record.bytes[1], addr as u8, value
+                )
             }
             _ => format!("${:02X},X", record.bytes[1]),
         },
         AddressingMode::ZeroPageY => match (record.operand_addr, record.operand_value) {
             (Some(addr), Some(value)) => {
-                format!("${:02X},Y @ {:02X} = {:02X}", record.bytes[1], addr as u8, value)
+                format!(
+                    "${:02X},Y @ {:02X} = {:02X}",
+                    record.bytes[1], addr as u8, value
+                )
             }
             _ => format!("${:02X},Y", record.bytes[1]),
         },
@@ -81,7 +92,9 @@ fn format_operand(mode: AddressingMode, record: &StepRecord) -> String {
         AddressingMode::AbsoluteX => {
             let base = u16::from_le_bytes([record.bytes[1], record.bytes[2]]);
             match (record.operand_addr, record.operand_value) {
-                (Some(addr), Some(value)) => format!("${:04X},X @ {:04X} = {:02X}", base, addr, value),
+                (Some(addr), Some(value)) => {
+                    format!("${:04X},X @ {:04X} = {:02X}", base, addr, value)
+                }
                 (Some(addr), None) => format!("${:04X},X @ {:04X}", base, addr),
                 _ => format!("${:04X},X", base),
             }
@@ -89,22 +102,28 @@ fn format_operand(mode: AddressingMode, record: &StepRecord) -> String {
         AddressingMode::AbsoluteY => {
             let base = u16::from_le_bytes([record.bytes[1], record.bytes[2]]);
             match (record.operand_addr, record.operand_value) {
-                (Some(addr), Some(value)) => format!("${:04X},Y @ {:04X} = {:02X}", base, addr, value),
+                (Some(addr), Some(value)) => {
+                    format!("${:04X},Y @ {:04X} = {:02X}", base, addr, value)
+                }
                 (Some(addr), None) => format!("${:04X},Y @ {:04X}", base, addr),
                 _ => format!("${:04X},Y", base),
             }
         }
         AddressingMode::Indirect => match (record.pointer_addr, record.pointer_value) {
             (Some(pointer), Some(target)) => format!("(${:04X}) = {:04X}", pointer, target),
-            _ => format!("(${:04X})", u16::from_le_bytes([record.bytes[1], record.bytes[2]])),
+            _ => format!(
+                "(${:04X})",
+                u16::from_le_bytes([record.bytes[1], record.bytes[2]])
+            ),
         },
-        AddressingMode::IndirectX => match (record.pointer_addr, record.pointer_value, record.operand_value) {
+        AddressingMode::IndirectX => match (
+            record.pointer_addr,
+            record.pointer_value,
+            record.operand_value,
+        ) {
             (Some(pointer), Some(target), Some(value)) => format!(
                 "(${:02X},X) @ {:02X} = {:04X} = {:02X}",
-                record.bytes[1],
-                pointer as u8,
-                target,
-                value
+                record.bytes[1], pointer as u8, target, value
             ),
             _ => format!("(${:02X},X)", record.bytes[1]),
         },
@@ -116,10 +135,7 @@ fn format_operand(mode: AddressingMode, record: &StepRecord) -> String {
         ) {
             (Some(pointer), Some(base), Some(addr), Some(value)) => format!(
                 "(${:02X}),Y = {:04X} @ {:04X} = {:02X}",
-                pointer as u8,
-                base,
-                addr,
-                value
+                pointer as u8, base, addr, value
             ),
             _ => format!("(${:02X}),Y", record.bytes[1]),
         },

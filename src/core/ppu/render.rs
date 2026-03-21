@@ -27,7 +27,9 @@ pub fn render_background_frame(
     let mut event_index = 0usize;
 
     for screen_y in 0..SCREEN_HEIGHT {
-        while event_index + 1 < scroll_events.len() && scroll_events[event_index + 1].scanline <= screen_y {
+        while event_index + 1 < scroll_events.len()
+            && scroll_events[event_index + 1].scanline <= screen_y
+        {
             event_index += 1;
         }
         let event = scroll_events[event_index];
@@ -46,12 +48,14 @@ pub fn render_background_frame(
             let fine_x = world_x & 0x07;
             let fine_y = world_y & 0x07;
 
-            let nametable_select = ((base_nametable >> 10) as usize + nametable_x + (nametable_y << 1)) & 0x03;
+            let nametable_select =
+                ((base_nametable >> 10) as usize + nametable_x + (nametable_y << 1)) & 0x03;
             let nametable_base = 0x2000 + (nametable_select as u16) * 0x0400;
             let nametable_addr = nametable_base + (tile_y as u16) * 32 + tile_x as u16;
             let tile_index = memory.peek(nametable_addr, cartridge);
 
-            let attribute_addr = nametable_base + 0x03C0 + ((tile_y / 4) as u16) * 8 + (tile_x / 4) as u16;
+            let attribute_addr =
+                nametable_base + 0x03C0 + ((tile_y / 4) as u16) * 8 + (tile_x / 4) as u16;
             let attribute_byte = memory.peek(attribute_addr, cartridge);
             let attribute_shift = (((tile_y & 0x02) << 1) | (tile_x & 0x02)) as u8;
             let palette_select = (attribute_byte >> attribute_shift) & 0x03;

@@ -1,5 +1,5 @@
-use RustNES::core::cartridge::load_cartridge_from_bytes;
 use RustNES::core::bus::CpuBus;
+use RustNES::core::cartridge::load_cartridge_from_bytes;
 use RustNES::core::console::Console;
 
 fn cartridge_with_vectors(reset: u16, nmi: u16, irq: u16) -> RustNES::core::cartridge::Cartridge {
@@ -31,7 +31,9 @@ fn brk_pushes_return_address_and_vectors_through_irq() {
     let mut console = Console::new(cartridge_with_vectors(0xC000, 0xD234, 0xE345));
     console.reset();
 
-    let record = console.step_instruction().expect("BRK should be implemented");
+    let record = console
+        .step_instruction()
+        .expect("BRK should be implemented");
 
     assert_eq!(record.pc_before, 0xC000);
     assert_eq!(console.cpu().pc, 0xE345);

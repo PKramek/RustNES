@@ -3,8 +3,8 @@ mod support;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use assert_cmd::Command;
 use RustNES::shell::{ShellCommand, TraceOptions};
+use assert_cmd::Command;
 
 use support::{unique_temp_path, write_rom};
 
@@ -24,7 +24,12 @@ fn trace_command_contract_parses_expected_flags() {
 
     let command = ShellCommand::from_args(args).expect("trace command should parse");
     match command {
-        ShellCommand::Trace(TraceOptions { rom_path, start_pc, output, max_instructions }) => {
+        ShellCommand::Trace(TraceOptions {
+            rom_path,
+            start_pc,
+            output,
+            max_instructions,
+        }) => {
             assert_eq!(rom_path, PathBuf::from("tests/roms/nestest.nes"));
             assert_eq!(start_pc, Some(0xC000));
             assert_eq!(output, Some(PathBuf::from("trace.log")));
@@ -39,17 +44,28 @@ fn trace_command_writes_stdout_and_honors_instruction_cap() {
     let rom_path = unique_temp_path("trace-stdout", "nes");
     write_rom(
         &rom_path,
-        &[(0xC000, 0xA9), (0xC001, 0x01), (0xC002, 0xEA), (0xC003, 0x00)],
+        &[
+            (0xC000, 0xA9),
+            (0xC001, 0x01),
+            (0xC002, 0xEA),
+            (0xC003, 0x00),
+        ],
         0xC000,
     );
 
     let assert = Command::cargo_bin("RustNES")
         .expect("binary should build")
-        .args(["trace", rom_path.to_str().expect("temp path should be utf-8"), "--max-instructions", "2"])
+        .args([
+            "trace",
+            rom_path.to_str().expect("temp path should be utf-8"),
+            "--max-instructions",
+            "2",
+        ])
         .assert()
         .success();
 
-    let output = String::from_utf8(assert.get_output().stdout.clone()).expect("trace stdout should be valid utf-8");
+    let output = String::from_utf8(assert.get_output().stdout.clone())
+        .expect("trace stdout should be valid utf-8");
     assert!(output.contains("A9 01"));
     assert!(output.contains("EA"));
     assert!(!output.contains("BRK"));

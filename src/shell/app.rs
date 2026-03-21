@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::core::cartridge::Cartridge;
 
-use super::{load_rom_from_path, LoadRomError, LoadedRom};
+use super::{LoadRomError, LoadedRom, load_rom_from_path};
 
 #[derive(Debug)]
 pub enum AppState {
@@ -53,14 +53,18 @@ impl App {
         &self.state
     }
 
-    pub fn open_path_with_confirmation<F>(&mut self, path: PathBuf, confirm_replace: F) -> OpenRomOutcome
+    pub fn open_path_with_confirmation<F>(
+        &mut self,
+        path: PathBuf,
+        confirm_replace: F,
+    ) -> OpenRomOutcome
     where
         F: FnOnce(&LoadedRom, &Path) -> bool,
     {
-        if let AppState::Loaded(current) = &self.state {
-            if !confirm_replace(&current.rom, &path) {
-                return OpenRomOutcome::CancelledReplace;
-            }
+        if let AppState::Loaded(current) = &self.state
+            && !confirm_replace(&current.rom, &path)
+        {
+            return OpenRomOutcome::CancelledReplace;
         }
 
         self.state = AppState::Loading(path.clone());

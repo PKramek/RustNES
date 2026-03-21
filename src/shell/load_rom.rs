@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::core::cartridge::{load_cartridge_from_bytes, Cartridge, CartridgeError};
+use crate::core::cartridge::{Cartridge, CartridgeError, load_cartridge_from_bytes};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadedRom {
@@ -31,7 +31,11 @@ impl LoadRomError {
     pub fn diagnostic_message(&self) -> String {
         match self {
             Self::Io { path, source } => {
-                format!("RustNES could not read ROM at {}: {}.", path.display(), source)
+                format!(
+                    "RustNES could not read ROM at {}: {}.",
+                    path.display(),
+                    source
+                )
             }
             Self::Cartridge {
                 source: CartridgeError::UnsupportedMapper { mapper, reason },
@@ -50,10 +54,11 @@ pub fn load_rom_from_path(path: impl AsRef<Path>) -> Result<(LoadedRom, Cartridg
         path: source_path.clone(),
         source,
     })?;
-    let cartridge = load_cartridge_from_bytes(&bytes).map_err(|source| LoadRomError::Cartridge {
-        path: source_path.clone(),
-        source,
-    })?;
+    let cartridge =
+        load_cartridge_from_bytes(&bytes).map_err(|source| LoadRomError::Cartridge {
+            path: source_path.clone(),
+            source,
+        })?;
 
     let metadata = LoadedRom {
         source_path,

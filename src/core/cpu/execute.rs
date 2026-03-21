@@ -265,7 +265,10 @@ impl Cpu {
                 self.tick_with_page_cross(bus, base_cycles, operand.page_crossed);
             }
             0xC6 | 0xCE | 0xD6 | 0xDE => {
-                let value = operand.value.expect("DEC requires operand value").wrapping_sub(1);
+                let value = operand
+                    .value
+                    .expect("DEC requires operand value")
+                    .wrapping_sub(1);
                 bus.write(operand.addr.expect("DEC requires target address"), value);
                 self.set_zero_negative(value);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -300,7 +303,10 @@ impl Cpu {
                 self.tick_with_page_cross(bus, base_cycles, operand.page_crossed);
             }
             0xE6 | 0xEE | 0xF6 | 0xFE => {
-                let value = operand.value.expect("INC requires operand value").wrapping_add(1);
+                let value = operand
+                    .value
+                    .expect("INC requires operand value")
+                    .wrapping_add(1);
                 bus.write(operand.addr.expect("INC requires target address"), value);
                 self.set_zero_negative(value);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -333,7 +339,13 @@ impl Cpu {
         }
     }
 
-    fn branch(&mut self, bus: &mut impl CpuBus, condition: bool, operand: ResolvedOperand, base_cycles: u8) {
+    fn branch(
+        &mut self,
+        bus: &mut impl CpuBus,
+        condition: bool,
+        operand: ResolvedOperand,
+        base_cycles: u8,
+    ) {
         let next_pc = self.next_pc(2);
         self.pc = next_pc;
         self.tick(bus, base_cycles);
@@ -355,7 +367,10 @@ impl Cpu {
     ) {
         match mode {
             AddressingMode::Accumulator => self.a = value,
-            _ => bus.write(operand.addr.expect("memory operand requires address"), value),
+            _ => bus.write(
+                operand.addr.expect("memory operand requires address"),
+                value,
+            ),
         }
         self.set_zero_negative(value);
     }

@@ -70,11 +70,18 @@ fn scroll_writes_shift_the_rendered_viewport() {
 
 #[test]
 fn console_can_run_until_the_next_completed_frame() {
-    let mut console = Console::new(cartridge_from_program(&[(0xC000, 0xEA)], 0xC000, 0xC000, 0xC000));
+    let mut console = Console::new(cartridge_from_program(
+        &[(0xC000, 0xEA)],
+        0xC000,
+        0xC000,
+        0xC000,
+    ));
     console.reset();
     console.bus_mut().write(0x2001, 0x08);
 
-    let advanced = console.run_until_next_frame(20_000).expect("NOP program should advance to the next frame");
+    let advanced = console
+        .run_until_next_frame(20_000)
+        .expect("NOP program should advance to the next frame");
 
     assert!(advanced);
     assert_eq!(console.bus().ppu().frame(), 1);

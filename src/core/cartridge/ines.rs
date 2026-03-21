@@ -26,7 +26,9 @@ pub fn parse_ines_rom(bytes: &[u8]) -> Result<InesRom, CartridgeError> {
 
     if bytes[12..16].iter().any(|byte| *byte != 0) {
         return Err(CartridgeError::DirtyHeader {
-            reason: String::from("header padding bytes 12-15 must be zeroed for strict iNES 1.0 parsing"),
+            reason: String::from(
+                "header padding bytes 12-15 must be zeroed for strict iNES 1.0 parsing",
+            ),
         });
     }
 
