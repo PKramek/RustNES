@@ -136,7 +136,16 @@ impl CpuBus for Bus {
                 let (ppu, cartridge) = (&mut self.ppu, &mut self.cartridge);
                 ppu.cpu_write_register(normalized, value, cartridge);
             }
-            0x4014 => self.dma.request(value),
+            0x4014 => {
+                self.dma.request(value);
+                let start = (value as u16) << 8;
+                let mut page = [0u8; 256];
+                for (offset, byte) in page.iter_mut().enumerate() {
+                    *byte = self.read(start.wrapping_add(offset as u16));
+                }
+                self.ppu.oam_dma(&page);
+                self.dma.clear();
+            }
             0x4016 => self.controller1.write_strobe(value),
             0x4017 => self.controller2.write_strobe(value),
             0x4020..=0xFFFF => self.cartridge.cpu_write(addr, value),

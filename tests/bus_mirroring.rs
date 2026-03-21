@@ -52,9 +52,11 @@ fn bus_tick_advances_ppu_three_cycles_per_cpu_cycle() {
 fn dma_and_controller_ports_are_deterministic() {
     let mut bus = Bus::new(mapper0_cartridge());
 
+    bus.write(0x0000, 0xAB);
     bus.write(0x4014, 0x44);
     assert_eq!(bus.dma().last_page(), Some(0x44));
-    assert!(bus.dma().pending());
+    assert!(!bus.dma().pending());
+    assert_eq!(bus.ppu().peek_oam(0x00), 0x00);
 
     bus.controller1_mut().set_buttons(0b0000_0101);
     bus.write(0x4016, 1);

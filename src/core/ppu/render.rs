@@ -1,6 +1,6 @@
 use crate::core::cartridge::Cartridge;
 
-use super::{FRAMEBUFFER_LEN, PpuMemory, PpuRegisters, SCREEN_HEIGHT, SCREEN_WIDTH};
+use super::{FRAMEBUFFER_LEN, PpuMemory, PpuRegisters, SCREEN_HEIGHT, SCREEN_WIDTH, ScrollEvent};
 
 const MASK_SHOW_BACKGROUND: u8 = 0x08;
 const CTRL_BACKGROUND_PATTERN_TABLE: u8 = 0x10;
@@ -8,26 +8,33 @@ const CTRL_BACKGROUND_PATTERN_TABLE: u8 = 0x10;
 pub fn render_background_frame(
     memory: &PpuMemory,
     registers: &PpuRegisters,
-    scroll_x: u16,
-    scroll_y: u16,
+    scroll_events: &[ScrollEvent],
     framebuffer: &mut [u8; FRAMEBUFFER_LEN],
+    background_opaque: &mut [bool; FRAMEBUFFER_LEN],
     cartridge: &Cartridge,
 ) {
     if registers.mask & MASK_SHOW_BACKGROUND == 0 {
         framebuffer.fill(0);
+        background_opaque.fill(false);
         return;
     }
 
-    let base_nametable = ((registers.ctrl as u16) & 0x03) << 10;
-    let scroll_x = scroll_x as usize;
-    let scroll_y = scroll_y as usize;
     let pattern_base = if registers.ctrl & CTRL_BACKGROUND_PATTERN_TABLE != 0 {
         0x1000
     } else {
         0x0000
     };
+    let mut event_index = 0usize;
 
     for screen_y in 0..SCREEN_HEIGHT {
+        while event_index + 1 < scroll_events.len() && scroll_events[event_index + 1].scanline <= screen_y {
+            event_index += 1;
+        }
+        let event = scroll_events[event_index];
+        let base_nametable = event.base_nametable;
+        let scroll_x = event.scroll_x as usize;
+        let scroll_y = event.scroll_y as usize;
+
         for screen_x in 0..SCREEN_WIDTH {
             let world_x = scroll_x + screen_x;
             let world_y = scroll_y + screen_y;
@@ -56,6 +63,8 @@ pub fn render_background_frame(
             let color_low = (low_plane >> bit) & 0x01;
             let color_high = (high_plane >> bit) & 0x01;
             let palette_index = (color_high << 1) | color_low;
+            let framebuffer_index = screen_y * SCREEN_WIDTH + screen_x;
+            background_opaque[framebuffer_index] = palette_index != 0;
 
             let color = if palette_index == 0 {
                 memory.peek(0x3F00, cartridge)
@@ -64,7 +73,7 @@ pub fn render_background_frame(
                 memory.peek(palette_addr, cartridge)
             };
 
-            framebuffer[screen_y * SCREEN_WIDTH + screen_x] = color;
+            framebuffer[framebuffer_index] = color;
         }
     }
 }

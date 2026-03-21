@@ -1,12 +1,14 @@
 mod memory;
 mod render;
 mod registers;
+mod sprites;
 
 use crate::core::cartridge::Cartridge;
 
 use memory::PpuMemory;
 use render::render_background_frame;
 use registers::PpuRegisters;
+use sprites::compose_sprites;
 pub use registers::{
     CTRL_NMI_ENABLE, CTRL_VRAM_INCREMENT, STATUS_SPRITE_OVERFLOW, STATUS_SPRITE_ZERO_HIT,
     STATUS_VBLANK,
@@ -20,14 +22,24 @@ pub const PPU_SCANLINES_PER_FRAME: i16 = 262;
 const PRE_RENDER_SCANLINE: i16 = 261;
 const VBLANK_START_SCANLINE: i16 = 241;
 
+#[derive(Debug, Clone, Copy)]
+pub struct ScrollEvent {
+    pub scanline: usize,
+    pub scroll_x: u16,
+    pub scroll_y: u16,
+    pub base_nametable: u16,
+}
+
 #[derive(Debug)]
 pub struct Ppu {
     registers: PpuRegisters,
     memory: PpuMemory,
     framebuffer: [u8; FRAMEBUFFER_LEN],
+    background_opaque: [bool; FRAMEBUFFER_LEN],
     frame_ready: bool,
     scroll_x: u16,
     scroll_y: u16,
+    scroll_events: Vec<ScrollEvent>,
     scanline: i16,
     dot: u16,
     frame: u64,
@@ -40,9 +52,16 @@ impl Default for Ppu {
             registers: PpuRegisters::default(),
             memory: PpuMemory::default(),
             framebuffer: [0; FRAMEBUFFER_LEN],
+            background_opaque: [false; FRAMEBUFFER_LEN],
             frame_ready: false,
             scroll_x: 0,
             scroll_y: 0,
+            scroll_events: vec![ScrollEvent {
+                scanline: 0,
+                scroll_x: 0,
+                scroll_y: 0,
+                base_nametable: 0,
+            }],
             scanline: 0,
             dot: 0,
             frame: 0,
@@ -134,6 +153,17 @@ impl Ppu {
         self.memory.oam_read(addr)
     }
 
+    pub fn scroll_events(&self) -> &[ScrollEvent] {
+        &self.scroll_events
+    }
+
+    pub fn oam_dma(&mut self, page_data: &[u8; 256]) {
+        for (offset, value) in page_data.iter().enumerate() {
+            let addr = self.registers.oam_addr.wrapping_add(offset as u8);
+            self.memory.oam_write(addr, *value);
+        }
+    }
+
     pub fn cpu_read_register(&mut self, addr: u16, cartridge: &Cartridge) -> u8 {
         match addr {
             0x2002 => {
@@ -153,6 +183,7 @@ impl Ppu {
             0x2000 => {
                 self.registers.ctrl = value;
                 self.registers.t = (self.registers.t & !0x0C00) | (((value as u16) & 0x03) << 10);
+                self.record_scroll_event();
             }
             0x2001 => self.registers.mask = value,
             0x2003 => self.registers.oam_addr = value,
@@ -185,15 +216,28 @@ impl Ppu {
                 render_background_frame(
                     &self.memory,
                     &self.registers,
-                    self.scroll_x,
-                    self.scroll_y,
+                    &self.scroll_events,
                     &mut self.framebuffer,
+                    &mut self.background_opaque,
                     cartridge,
                 );
+                if compose_sprites(
+                    &self.memory,
+                    &self.registers,
+                    &mut self.framebuffer,
+                    &self.background_opaque,
+                    cartridge,
+                ) {
+                    self.registers.status |= STATUS_SPRITE_ZERO_HIT;
+                }
                 self.registers.set_vblank(true);
                 self.frame_ready = true;
             }
-            (PRE_RENDER_SCANLINE, 1) => self.registers.clear_frame_flags(),
+            (PRE_RENDER_SCANLINE, 1) => {
+                self.registers.clear_frame_flags();
+                self.scroll_events.clear();
+                self.scroll_events.push(self.current_scroll_event(0));
+            }
             _ => {}
         }
     }
@@ -235,6 +279,7 @@ impl Ppu {
                 | (((value as u16) & 0x07) << 12);
             self.scroll_y = value as u16;
             self.registers.w = false;
+            self.record_scroll_event();
         }
     }
 
@@ -251,5 +296,27 @@ impl Ppu {
 
     fn increment_vram_addr(&mut self) {
         self.registers.v = self.registers.v.wrapping_add(self.registers.vram_increment()) & 0x3FFF;
+    }
+
+    fn current_scroll_event(&self, scanline: usize) -> ScrollEvent {
+        ScrollEvent {
+            scanline,
+            scroll_x: self.scroll_x,
+            scroll_y: self.scroll_y,
+            base_nametable: ((self.registers.ctrl as u16) & 0x03) << 10,
+        }
+    }
+
+    fn record_scroll_event(&mut self) {
+        let scanline = if (0..SCREEN_HEIGHT as i16).contains(&self.scanline) {
+            self.scanline as usize
+        } else {
+            0
+        };
+        let event = self.current_scroll_event(scanline);
+        match self.scroll_events.last_mut() {
+            Some(last) if last.scanline == scanline => *last = event,
+            _ => self.scroll_events.push(event),
+        }
     }
 }
