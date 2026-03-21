@@ -1,0 +1,15 @@
+[package]
+name = "RustNES"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+bitflags = "2.11.0"
+rfd = "0.17.2"
+thiserror = "2.0.18"
+
+[dev-dependencies]
+assert_cmd = "2.2.0"
+proptest = "1.10.0"
+rstest = "0.26.1"
