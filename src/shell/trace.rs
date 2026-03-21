@@ -1,7 +1,13 @@
 use std::ffi::OsString;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{Context, bail, Result};
+
+use crate::core::console::Console;
+use crate::core::cpu::format_trace_line;
+
+use super::load_rom_from_path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceOptions {
@@ -26,8 +32,7 @@ impl TraceOptions {
             match arg.to_str() {
                 Some("--pc") => {
                     let value = iter.next().ok_or_else(|| anyhow::anyhow!("missing value for --pc"))?;
-                    let text = value.to_string_lossy();
-                    start_pc = Some(u16::from_str_radix(text.trim_start_matches("0x"), 16)?);
+                    start_pc = Some(parse_hex_u16(&value.to_string_lossy())?);
                 }
                 Some("--output") => {
                     output = Some(PathBuf::from(iter.next().ok_or_else(|| anyhow::anyhow!("missing value for --output"))?));
@@ -56,6 +61,46 @@ impl TraceOptions {
     }
 }
 
-pub fn run_trace(_options: TraceOptions) -> Result<()> {
+pub fn run_trace(options: TraceOptions) -> Result<()> {
+    let (_, cartridge) = load_rom_from_path(&options.rom_path)
+        .map_err(|error| anyhow::anyhow!(error.diagnostic_message()))?;
+    let mut console = Console::new(cartridge);
+    console.reset();
+
+    if let Some(pc) = options.start_pc {
+        console.cpu_mut().pc = pc;
+    }
+
+    if let Some(output_path) = &options.output {
+        let file = std::fs::File::create(output_path)
+            .with_context(|| format!("failed to create trace output {}", output_path.display()))?;
+        let mut writer = BufWriter::new(file);
+        emit_trace(&mut writer, &mut console, options.max_instructions)?;
+        writer.flush()?;
+    } else {
+        let stdout = std::io::stdout();
+        let mut writer = stdout.lock();
+        emit_trace(&mut writer, &mut console, options.max_instructions)?;
+        writer.flush()?;
+    }
+
+    Ok(())
+}
+
+fn parse_hex_u16(text: &str) -> Result<u16> {
+    let normalized = text.trim().trim_start_matches("0x").trim_start_matches('$');
+    Ok(u16::from_str_radix(normalized, 16)?)
+}
+
+fn emit_trace(writer: &mut impl Write, console: &mut Console, max_instructions: Option<usize>) -> Result<()> {
+    let limit = max_instructions.unwrap_or(10_000);
+    for _ in 0..limit {
+        let record = console.step_instruction()?;
+        writeln!(writer, "{}", format_trace_line(&record))?;
+        if max_instructions.is_none() && record.opcode == 0x00 {
+            break;
+        }
+    }
+
     Ok(())
 }

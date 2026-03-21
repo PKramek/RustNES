@@ -1,1 +1,6 @@
-placeholder nestest log for compile-only phase 2 scaffolding
+C000  A2 02    LDX #$02                         A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
+C002  A9 80    LDA #$80                         A:00 X:02 Y:00 P:24 SP:FD PPU:  0, 27 CYC:9
+C004  95 10    STA $10,X @ 12 = 11              A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 33 CYC:11
+C006  B5 10    LDA $10,X @ 12 = 80              A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 45 CYC:15
+C008  D0 02    BNE $C00C                        A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 57 CYC:19
+C00C  00       BRK                              A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 66 CYC:22
