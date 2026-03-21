@@ -27,14 +27,25 @@ fn ppu_register_mirrors_normalize_and_status_read_clears_flags() {
     assert_eq!(Bus::normalize_ppu_register_addr(0x3FFF), 0x2007);
 
     bus.write(0x2008, 0x81);
-    assert_eq!(bus.ppu_ports().ctrl(), 0x81);
+    assert_eq!(bus.ppu().ctrl(), 0x81);
 
-    bus.ppu_ports_mut().set_status(0xE0);
+    bus.ppu_mut().set_status(0xE0);
     bus.write(0x2005, 0x11);
-    assert!(bus.ppu_ports().write_toggle());
+    assert!(bus.ppu().write_toggle());
     assert_eq!(bus.read(0x2002), 0xE0);
-    assert!(!bus.ppu_ports().write_toggle());
+    assert!(!bus.ppu().write_toggle());
     assert_eq!(bus.read(0x2002), 0x60);
+}
+
+#[test]
+fn bus_tick_advances_ppu_three_cycles_per_cpu_cycle() {
+    let mut bus = Bus::new(mapper0_cartridge());
+
+    bus.tick();
+
+    assert_eq!(bus.total_cpu_cycles(), 1);
+    assert_eq!(bus.ppu().total_cycles(), 3);
+    assert_eq!(bus.ppu().dot(), 3);
 }
 
 #[test]

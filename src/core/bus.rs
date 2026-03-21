@@ -1,5 +1,6 @@
 use crate::core::cartridge::Cartridge;
-use crate::core::io::{ControllerPort, OamDmaPort, PpuPortsStub};
+use crate::core::io::{ControllerPort, OamDmaPort};
+use crate::core::ppu::Ppu;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct InterruptLines {
@@ -19,7 +20,7 @@ pub trait CpuBus {
 pub struct Bus {
     cpu_ram: [u8; 0x800],
     cartridge: Cartridge,
-    ppu_ports: PpuPortsStub,
+    ppu: Ppu,
     controller1: ControllerPort,
     controller2: ControllerPort,
     dma: OamDmaPort,
@@ -32,7 +33,7 @@ impl Bus {
         Self {
             cpu_ram: [0; 0x800],
             cartridge,
-            ppu_ports: PpuPortsStub::default(),
+            ppu: Ppu::default(),
             controller1: ControllerPort::default(),
             controller2: ControllerPort::default(),
             dma: OamDmaPort::default(),
@@ -65,12 +66,12 @@ impl Bus {
         &mut self.dma
     }
 
-    pub fn ppu_ports(&self) -> &PpuPortsStub {
-        &self.ppu_ports
+    pub fn ppu(&self) -> &Ppu {
+        &self.ppu
     }
 
-    pub fn ppu_ports_mut(&mut self) -> &mut PpuPortsStub {
-        &mut self.ppu_ports
+    pub fn ppu_mut(&mut self) -> &mut Ppu {
+        &mut self.ppu
     }
 
     pub fn controller1(&self) -> &ControllerPort {
@@ -115,7 +116,10 @@ impl CpuBus for Bus {
     fn read(&mut self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x1FFF => self.cpu_ram[Self::normalize_cpu_ram_addr(addr)],
-            0x2000..=0x3FFF => self.ppu_ports.read(Self::normalize_ppu_register_addr(addr)),
+            0x2000..=0x3FFF => {
+                let normalized = Self::normalize_ppu_register_addr(addr);
+                self.ppu.cpu_read_register(normalized, &self.cartridge)
+            }
             0x4014 => self.dma.last_page().unwrap_or(0),
             0x4016 => self.controller1.read(),
             0x4017 => self.controller2.read(),
@@ -127,7 +131,11 @@ impl CpuBus for Bus {
     fn write(&mut self, addr: u16, value: u8) {
         match addr {
             0x0000..=0x1FFF => self.cpu_ram[Self::normalize_cpu_ram_addr(addr)] = value,
-            0x2000..=0x3FFF => self.ppu_ports.write(Self::normalize_ppu_register_addr(addr), value),
+            0x2000..=0x3FFF => {
+                let normalized = Self::normalize_ppu_register_addr(addr);
+                let (ppu, cartridge) = (&mut self.ppu, &mut self.cartridge);
+                ppu.cpu_write_register(normalized, value, cartridge);
+            }
             0x4014 => self.dma.request(value),
             0x4016 => self.controller1.write_strobe(value),
             0x4017 => self.controller2.write_strobe(value),
@@ -138,9 +146,16 @@ impl CpuBus for Bus {
 
     fn tick(&mut self) {
         self.total_cpu_cycles += 1;
+        for _ in 0..3 {
+            self.ppu.tick();
+        }
     }
 
     fn interrupt_lines(&self) -> InterruptLines {
-        self.interrupt_lines
+        InterruptLines {
+            irq: self.interrupt_lines.irq,
+            reset: self.interrupt_lines.reset,
+            nmi: self.interrupt_lines.nmi || self.ppu.nmi_line(),
+        }
     }
 }
