@@ -14,6 +14,14 @@
 - Prefer conventional commit style for the pull request title when it accurately describes the change.
 - Avoid unrelated refactors, formatting churn, or dependency changes unless they are part of the stated objective.
 
+## Merge Strategy
+
+- Merge short-lived topic branches into `develop` through pull requests.
+- Prefer `squash merge` for topic branches so each pull request lands as one reviewable change on `develop`.
+- Promote `develop` into `main` through a dedicated pull request.
+- Prefer `rebase merge` for `develop` to `main` promotions so `main` stays aligned with `develop` without creating duplicate branch history.
+- Avoid `squash merge` for `develop` to `main` promotions unless you intentionally want `main` and `develop` to diverge in commit history.
+
 ## Validation
 
 Run the same checks locally before opening or updating a pull request:
