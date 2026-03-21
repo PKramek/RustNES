@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 anyhow = "1.0.102"
 bitflags = "2.11.0"
-rfd = "0.17.2"
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
 thiserror = "2.0.18"
 
 [dev-dependencies]
