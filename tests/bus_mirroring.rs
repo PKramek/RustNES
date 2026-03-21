@@ -10,12 +10,48 @@ fn mapper0_cartridge() -> RustNES::core::cartridge::Cartridge {
 }
 
 #[test]
-fn bus_contracts_compile_for_ram_and_register_mirrors() {
+fn ram_mirrors_share_one_backing_array() {
     let mut bus = Bus::new(mapper0_cartridge());
 
     bus.write(0x0000, 0x12);
     assert_eq!(bus.read(0x0800), 0x12);
+    bus.write(0x17FF, 0x34);
+    assert_eq!(bus.read(0x07FF), 0x34);
+}
+
+#[test]
+fn ppu_register_mirrors_normalize_and_status_read_clears_flags() {
+    let mut bus = Bus::new(mapper0_cartridge());
+
     assert_eq!(Bus::normalize_ppu_register_addr(0x2008), 0x2000);
+    assert_eq!(Bus::normalize_ppu_register_addr(0x3FFF), 0x2007);
+
+    bus.write(0x2008, 0x81);
+    assert_eq!(bus.ppu_ports().ctrl(), 0x81);
+
+    bus.ppu_ports_mut().set_status(0xE0);
+    bus.write(0x2005, 0x11);
+    assert!(bus.ppu_ports().write_toggle());
+    assert_eq!(bus.read(0x2002), 0xE0);
+    assert!(!bus.ppu_ports().write_toggle());
+    assert_eq!(bus.read(0x2002), 0x60);
+}
+
+#[test]
+fn dma_and_controller_ports_are_deterministic() {
+    let mut bus = Bus::new(mapper0_cartridge());
+
     bus.write(0x4014, 0x44);
     assert_eq!(bus.dma().last_page(), Some(0x44));
+    assert!(bus.dma().pending());
+
+    bus.controller1_mut().set_buttons(0b0000_0101);
+    bus.write(0x4016, 1);
+    assert!(bus.controller1().strobe_high());
+    assert_eq!(bus.read(0x4016) & 1, 1);
+
+    bus.write(0x4016, 0);
+    assert_eq!(bus.read(0x4016) & 1, 1);
+    assert_eq!(bus.read(0x4016) & 1, 0);
+    assert_eq!(bus.read(0x4016) & 1, 1);
 }

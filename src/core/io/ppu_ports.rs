@@ -9,6 +9,18 @@ pub struct PpuPortsStub {
 }
 
 impl PpuPortsStub {
+    pub fn ctrl(&self) -> u8 {
+        self.ctrl
+    }
+
+    pub fn set_status(&mut self, value: u8) {
+        self.status = value;
+    }
+
+    pub fn write_toggle(&self) -> bool {
+        self.write_toggle
+    }
+
     pub fn read(&mut self, addr: u16) -> u8 {
         match addr {
             0x2000 => self.ctrl,

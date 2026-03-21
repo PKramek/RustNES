@@ -33,7 +33,23 @@ impl Console {
     }
 
     pub fn reset(&mut self) {
-        self.cpu.reset(&mut self.bus);
+        self.cpu.service_reset(&mut self.bus);
+    }
+
+    pub fn service_nmi(&mut self) {
+        self.cpu.service_nmi(&mut self.bus);
+    }
+
+    pub fn service_irq(&mut self) {
+        self.cpu.service_irq(&mut self.bus);
+    }
+
+    pub fn service_brk(&mut self) {
+        self.cpu.service_brk(&mut self.bus);
+    }
+
+    pub fn return_from_interrupt(&mut self) {
+        self.cpu.return_from_interrupt(&mut self.bus);
     }
 
     pub fn step_instruction(&mut self) -> Result<StepRecord, CpuError> {

@@ -61,6 +61,18 @@ impl Bus {
         &self.dma
     }
 
+    pub fn dma_mut(&mut self) -> &mut OamDmaPort {
+        &mut self.dma
+    }
+
+    pub fn ppu_ports(&self) -> &PpuPortsStub {
+        &self.ppu_ports
+    }
+
+    pub fn ppu_ports_mut(&mut self) -> &mut PpuPortsStub {
+        &mut self.ppu_ports
+    }
+
     pub fn controller1(&self) -> &ControllerPort {
         &self.controller1
     }
@@ -83,6 +95,19 @@ impl Bus {
 
     pub fn total_cpu_cycles(&self) -> u64 {
         self.total_cpu_cycles
+    }
+
+    pub fn read_u16(&mut self, addr: u16) -> u16 {
+        let lo = self.read(addr) as u16;
+        let hi = self.read(addr.wrapping_add(1)) as u16;
+        (hi << 8) | lo
+    }
+
+    pub fn read_u16_bug(&mut self, addr: u16) -> u16 {
+        let lo = self.read(addr) as u16;
+        let hi_addr = (addr & 0xFF00) | addr.wrapping_add(1) & 0x00FF;
+        let hi = self.read(hi_addr) as u16;
+        (hi << 8) | lo
     }
 }
 

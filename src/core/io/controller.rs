@@ -13,6 +13,18 @@ impl ControllerPort {
         }
     }
 
+    pub fn latched_buttons(&self) -> u8 {
+        self.latched_buttons
+    }
+
+    pub fn shift_register(&self) -> u8 {
+        self.shift_register
+    }
+
+    pub fn strobe_high(&self) -> bool {
+        self.strobe_high
+    }
+
     pub fn write_strobe(&mut self, value: u8) {
         let strobe_high = value & 1 != 0;
         self.strobe_high = strobe_high;
