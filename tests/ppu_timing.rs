@@ -77,3 +77,16 @@ fn pre_render_scanline_clears_frame_flags_and_rolls_frames() {
     assert_eq!(bus.ppu().frame(), 1);
     assert_eq!(bus.ppu().scanline(), 0);
 }
+
+#[test]
+fn frame_ready_latches_at_vblank_until_consumed() {
+    let mut bus = Bus::new(mapper0_cartridge());
+    assert!(!bus.ppu().frame_ready());
+
+    advance_cpu_ticks(&mut bus, (241 * 341 - 2) / 3);
+    bus.tick();
+
+    assert!(bus.ppu().frame_ready());
+    assert!(bus.ppu_mut().take_frame_ready());
+    assert!(!bus.ppu().frame_ready());
+}

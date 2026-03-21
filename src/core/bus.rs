@@ -147,7 +147,7 @@ impl CpuBus for Bus {
     fn tick(&mut self) {
         self.total_cpu_cycles += 1;
         for _ in 0..3 {
-            self.ppu.tick();
+            self.ppu.tick(&self.cartridge);
         }
     }
 

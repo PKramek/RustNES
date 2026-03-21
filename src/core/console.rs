@@ -53,7 +53,10 @@ impl Console {
     }
 
     pub fn step_instruction(&mut self) -> Result<StepRecord, CpuError> {
-        self.cpu.step_instruction(&mut self.bus)
+        let nmi_before = self.bus.ppu().nmi_line();
+        let record = self.cpu.step_instruction(&mut self.bus)?;
+        self.service_nmi_edge(nmi_before);
+        Ok(record)
     }
 
     pub fn run_with_limit(&mut self, max_instructions: usize) -> Result<Vec<StepRecord>, CpuError> {
@@ -62,5 +65,26 @@ impl Console {
             records.push(self.step_instruction()?);
         }
         Ok(records)
+    }
+
+    pub fn run_until_next_frame(&mut self, max_instructions: usize) -> Result<bool, CpuError> {
+        let start_frame = self.bus.ppu().frame();
+        for _ in 0..max_instructions {
+            self.step_instruction()?;
+            if self.bus.ppu().frame() > start_frame {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub fn take_frame_ready(&mut self) -> bool {
+        self.bus.ppu_mut().take_frame_ready()
+    }
+
+    fn service_nmi_edge(&mut self, nmi_before: bool) {
+        if !nmi_before && self.bus.ppu().nmi_line() {
+            self.cpu.service_nmi(&mut self.bus);
+        }
     }
 }

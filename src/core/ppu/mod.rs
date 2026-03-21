@@ -1,9 +1,11 @@
 mod memory;
+mod render;
 mod registers;
 
 use crate::core::cartridge::Cartridge;
 
 use memory::PpuMemory;
+use render::render_background_frame;
 use registers::PpuRegisters;
 pub use registers::{
     CTRL_NMI_ENABLE, CTRL_VRAM_INCREMENT, STATUS_SPRITE_OVERFLOW, STATUS_SPRITE_ZERO_HIT,
@@ -23,6 +25,9 @@ pub struct Ppu {
     registers: PpuRegisters,
     memory: PpuMemory,
     framebuffer: [u8; FRAMEBUFFER_LEN],
+    frame_ready: bool,
+    scroll_x: u16,
+    scroll_y: u16,
     scanline: i16,
     dot: u16,
     frame: u64,
@@ -35,6 +40,9 @@ impl Default for Ppu {
             registers: PpuRegisters::default(),
             memory: PpuMemory::default(),
             framebuffer: [0; FRAMEBUFFER_LEN],
+            frame_ready: false,
+            scroll_x: 0,
+            scroll_y: 0,
             scanline: 0,
             dot: 0,
             frame: 0,
@@ -80,6 +88,14 @@ impl Ppu {
         self.registers.x & 0x07
     }
 
+    pub fn scroll_x(&self) -> u16 {
+        self.scroll_x
+    }
+
+    pub fn scroll_y(&self) -> u16 {
+        self.scroll_y
+    }
+
     pub fn scanline(&self) -> i16 {
         self.scanline
     }
@@ -98,6 +114,16 @@ impl Ppu {
 
     pub fn framebuffer(&self) -> &[u8; FRAMEBUFFER_LEN] {
         &self.framebuffer
+    }
+
+    pub fn frame_ready(&self) -> bool {
+        self.frame_ready
+    }
+
+    pub fn take_frame_ready(&mut self) -> bool {
+        let ready = self.frame_ready;
+        self.frame_ready = false;
+        ready
     }
 
     pub fn peek_memory(&self, addr: u16, cartridge: &Cartridge) -> u8 {
@@ -141,7 +167,7 @@ impl Ppu {
         }
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, cartridge: &Cartridge) {
         self.total_cycles += 1;
         self.dot += 1;
 
@@ -155,7 +181,18 @@ impl Ppu {
         }
 
         match (self.scanline, self.dot) {
-            (VBLANK_START_SCANLINE, 1) => self.registers.set_vblank(true),
+            (VBLANK_START_SCANLINE, 1) => {
+                render_background_frame(
+                    &self.memory,
+                    &self.registers,
+                    self.scroll_x,
+                    self.scroll_y,
+                    &mut self.framebuffer,
+                    cartridge,
+                );
+                self.registers.set_vblank(true);
+                self.frame_ready = true;
+            }
             (PRE_RENDER_SCANLINE, 1) => self.registers.clear_frame_flags(),
             _ => {}
         }
@@ -190,11 +227,13 @@ impl Ppu {
         if !self.registers.w {
             self.registers.t = (self.registers.t & !0x001F) | (((value as u16) >> 3) & 0x001F);
             self.registers.x = value & 0x07;
+            self.scroll_x = value as u16;
             self.registers.w = true;
         } else {
             self.registers.t = (self.registers.t & !0x73E0)
                 | ((((value as u16) >> 3) & 0x001F) << 5)
                 | (((value as u16) & 0x07) << 12);
+            self.scroll_y = value as u16;
             self.registers.w = false;
         }
     }
