@@ -1,6 +1,7 @@
 mod app;
 mod launcher;
 mod load_rom;
+mod trace;
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -10,10 +11,17 @@ use anyhow::Result;
 pub use app::{App, AppState, LoadFailure, LoadedSession, OpenRomOutcome};
 pub use launcher::Launcher;
 pub use load_rom::{load_rom_from_path, LoadRomError, LoadedRom};
+pub use trace::TraceOptions;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BootOptions {
     pub initial_rom: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShellCommand {
+    Launcher(BootOptions),
+    Trace(TraceOptions),
 }
 
 impl BootOptions {
@@ -26,14 +34,35 @@ impl BootOptions {
     }
 }
 
-pub fn run(options: BootOptions) -> Result<()> {
-    let launcher = Launcher::boot(options);
-
-    if let AppState::LoadFailed(failure) = launcher.state() {
-        eprintln!("{}", failure.message);
+impl ShellCommand {
+    pub fn from_env() -> Result<Self> {
+        let args = std::env::args_os().collect::<Vec<_>>();
+        Self::from_args(args)
     }
 
-    Ok(())
+    pub fn from_args(args: Vec<OsString>) -> Result<Self> {
+        match args.get(1).and_then(|value| value.to_str()) {
+            Some("trace") => Ok(Self::Trace(TraceOptions::from_args(args)?)),
+            _ => Ok(Self::Launcher(BootOptions {
+                initial_rom: initial_rom_arg(args),
+            })),
+        }
+    }
+}
+
+pub fn run(command: ShellCommand) -> Result<()> {
+    match command {
+        ShellCommand::Launcher(options) => {
+            let launcher = Launcher::boot(options);
+
+            if let AppState::LoadFailed(failure) = launcher.state() {
+                eprintln!("{}", failure.message);
+            }
+
+            Ok(())
+        }
+        ShellCommand::Trace(options) => trace::run_trace(options),
+    }
 }
 
 pub fn initial_rom_arg(args: impl IntoIterator<Item = OsString>) -> Option<PathBuf> {
