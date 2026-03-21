@@ -12,6 +12,7 @@
 - Keep each pull request scoped to a single objective.
 - Use the pull request template and fill in `Why`, `What Changed`, `Validation`, `Risks`, and `Follow-ups`.
 - Prefer conventional commit style for the pull request title when it accurately describes the change.
+- Use feature-oriented language in public metadata. Avoid internal planning terms such as `phase`, `milestone`, or similar labels in branch names, pull request titles, and squash commit titles.
 - Avoid unrelated refactors, formatting churn, or dependency changes unless they are part of the stated objective.
 
 ## Merge Strategy
@@ -46,4 +47,5 @@ If behavior changes, add or update tests in the same pull request.
 
 - Make small, reviewable commits with clear intent.
 - Prefer root-cause fixes over narrow patches.
+- When a change becomes part of public history, describe the user-visible feature or engineering concern rather than internal delivery phases.
 - Preserve the existing code style and project structure unless the change requires otherwise.
