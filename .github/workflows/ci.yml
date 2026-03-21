@@ -21,22 +21,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2432d0b54c86be510cb1d4f2ea0e0600d8
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@efa25f75e744ec10f063a5aa8b6eb0ff4b715206
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt, clippy
 
       - name: Restore Cargo cache
-        uses: Swatinem/rust-cache@c1937119777bd3685bba43864a761ec8d9bb644b
+        uses: Swatinem/rust-cache@v2
         with:
           shared-key: rustnes-ci
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install Cargo tooling
-        uses: taiki-e/install-action@e24b8b706c4b2e8c6ceef7a92fb4eebfaaf033ce
+        uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest@0.9.132, cargo-deny@0.19.0, cargo-machete@0.9.1
 
