@@ -1,4 +1,5 @@
 mod memory;
+mod palette;
 mod registers;
 mod render;
 mod sprites;
@@ -6,6 +7,7 @@ mod sprites;
 use crate::core::cartridge::Cartridge;
 
 use memory::PpuMemory;
+pub use palette::{RGBA_PIXEL_BYTES, palette_rgba, write_rgba_frame};
 use registers::PpuRegisters;
 pub use registers::{
     CTRL_NMI_ENABLE, CTRL_VRAM_INCREMENT, STATUS_SPRITE_OVERFLOW, STATUS_SPRITE_ZERO_HIT,
@@ -135,6 +137,24 @@ impl Ppu {
         &self.framebuffer
     }
 
+    pub fn refresh_framebuffer(&mut self, cartridge: &Cartridge) -> bool {
+        render_background_frame(
+            &self.memory,
+            &self.registers,
+            &self.scroll_events,
+            &mut self.framebuffer,
+            &mut self.background_opaque,
+            cartridge,
+        );
+        compose_sprites(
+            &self.memory,
+            &self.registers,
+            &mut self.framebuffer,
+            &self.background_opaque,
+            cartridge,
+        )
+    }
+
     pub fn frame_ready(&self) -> bool {
         self.frame_ready
     }
@@ -213,21 +233,7 @@ impl Ppu {
 
         match (self.scanline, self.dot) {
             (VBLANK_START_SCANLINE, 1) => {
-                render_background_frame(
-                    &self.memory,
-                    &self.registers,
-                    &self.scroll_events,
-                    &mut self.framebuffer,
-                    &mut self.background_opaque,
-                    cartridge,
-                );
-                if compose_sprites(
-                    &self.memory,
-                    &self.registers,
-                    &mut self.framebuffer,
-                    &self.background_opaque,
-                    cartridge,
-                ) {
+                if self.refresh_framebuffer(cartridge) {
                     self.registers.status |= STATUS_SPRITE_ZERO_HIT;
                 }
                 self.registers.set_vblank(true);
