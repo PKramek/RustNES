@@ -41,6 +41,10 @@ fn read_u16_zero_page(bus: &mut impl CpuBus, base: u8) -> u16 {
     (hi << 8) | lo
 }
 
+fn should_defer_absolute_value_read(addr: u16) -> bool {
+    matches!(addr, 0x2000..=0x4017)
+}
+
 impl Cpu {
     pub(crate) fn resolve_operand(
         &self,
@@ -102,7 +106,7 @@ impl Cpu {
                 let addr = read_u16(bus, self.pc.wrapping_add(1));
                 ResolvedOperand {
                     addr: Some(addr),
-                    value: Some(bus.read(addr)),
+                    value: (!should_defer_absolute_value_read(addr)).then(|| bus.read(addr)),
                     ..ResolvedOperand::default()
                 }
             }

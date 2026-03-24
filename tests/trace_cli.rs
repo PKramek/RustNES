@@ -13,7 +13,7 @@ fn trace_command_contract_parses_expected_flags() {
     let args = vec![
         OsString::from("rustnes"),
         OsString::from("trace"),
-        OsString::from("tests/roms/nestest.nes"),
+        OsString::from("example.nes"),
         OsString::from("--pc"),
         OsString::from("C000"),
         OsString::from("--output"),
@@ -30,7 +30,7 @@ fn trace_command_contract_parses_expected_flags() {
             output,
             max_instructions,
         }) => {
-            assert_eq!(rom_path, PathBuf::from("tests/roms/nestest.nes"));
+            assert_eq!(rom_path, PathBuf::from("example.nes"));
             assert_eq!(start_pc, Some(0xC000));
             assert_eq!(output, Some(PathBuf::from("trace.log")));
             assert_eq!(max_instructions, Some(5003));

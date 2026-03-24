@@ -1,22 +1,16 @@
 use std::path::{Path, PathBuf};
 
-use crate::core::cartridge::Cartridge;
-
-use super::{LoadRomError, LoadedRom, load_rom_from_path};
+use super::{LoadRomError, LoadedRom, RuntimeSession, load_rom_from_path};
 
 #[derive(Debug)]
 pub enum AppState {
     Launcher,
     Loading(PathBuf),
-    Loaded(LoadedSession),
+    Loaded(Box<RuntimeSession>),
     LoadFailed(LoadFailure),
 }
 
-#[derive(Debug)]
-pub struct LoadedSession {
-    pub rom: LoadedRom,
-    pub cartridge: Cartridge,
-}
+pub type LoadedSession = Box<RuntimeSession>;
 
 #[derive(Debug)]
 pub struct LoadFailure {
@@ -53,6 +47,10 @@ impl App {
         &self.state
     }
 
+    pub fn into_state(self) -> AppState {
+        self.state
+    }
+
     pub fn open_path_with_confirmation<F>(
         &mut self,
         path: PathBuf,
@@ -71,7 +69,7 @@ impl App {
 
         match load_rom_from_path(&path) {
             Ok((rom, cartridge)) => {
-                self.state = AppState::Loaded(LoadedSession { rom, cartridge });
+                self.state = AppState::Loaded(Box::new(RuntimeSession::new(rom, cartridge)));
                 OpenRomOutcome::Loaded
             }
             Err(error) => {
