@@ -50,6 +50,38 @@ pre-commit run --all-files
 pre-commit run --hook-stage pre-push --all-files
 ```
 
+## Synthetic Test Workflow
+
+Phase 7 standardizes ROM-free synthetic coverage around the shared helpers in `tests/support`.
+
+- `tests/support/runtime_script.rs` drives generated-cartridge runtime sessions, frame stepping, and scripted input.
+- `tests/support/assertions.rs` provides compact framebuffer and audio mismatch summaries.
+- `tests/support/save_state.rs` creates temp-path ROM and slot fixtures for future persistence tests.
+
+When extending milestone-critical synthetic coverage, prefer those helpers over ad hoc temp-path, framebuffer, or audio fixture code.
+
+Quick loop for runtime and video-heavy synthetic work:
+
+```bash
+cargo test --test ppu_timing --test smb_video --test runtime_session --test runtime_view
+```
+
+Phase 7 plan slices also use these focused commands while implementing specific areas:
+
+```bash
+cargo test --test runtime_session --test runtime_view --test shell_loader
+cargo test --test cpu_vectors --test ppu_timing --test ppu_background --test ppu_sprite0 --test smb_video --test apu_audio
+cargo test --test runtime_input --test runtime_controls --test runtime_session --test runtime_view --test audio_runtime --test shell_loader --test save_state --test desktop_product
+```
+
+Full synthetic gate:
+
+```bash
+cargo nextest run --all-targets --all-features
+```
+
+Committed tests must stay ROM-free. When a test needs a path-based seam, write generated ROM bytes to a temp file through `tests/support` helpers instead of reading from local `roms/` or `nestest/` directories.
+
 ## CI
 
 The workflow in `.github/workflows/ci.yml` mirrors the local checks and installs the Cargo helper binaries with pinned GitHub Actions.

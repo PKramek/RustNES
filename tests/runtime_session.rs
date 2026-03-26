@@ -1,61 +1,13 @@
 mod support;
 
-use std::fs;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use RustNES::core::ppu::FRAMEBUFFER_LEN;
-use RustNES::shell::{App, AppState, BootOptions, LoadRomError, PauseState, RuntimeSession};
+use RustNES::shell::{AppState, BootOptions, LoadRomError, PauseState};
+use winit::keyboard::KeyCode;
 
-use support::write_rom;
-
-fn unique_rom_path(name: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time should move forward")
-        .as_nanos();
-    std::env::temp_dir().join(format!("rustnes-runtime-{name}-{nanos}.nes"))
-}
-
-fn build_ines_rom(prg_banks: u8, chr_banks: u8, flags6: u8, flags7: u8) -> Vec<u8> {
-    let mut bytes = vec![b'N', b'E', b'S', 0x1A, prg_banks, chr_banks, flags6, flags7];
-    bytes.extend_from_slice(&[0; 8]);
-    bytes.extend(std::iter::repeat_n(0xAA, prg_banks as usize * 0x4000));
-    bytes.extend(std::iter::repeat_n(0xBB, chr_banks as usize * 0x2000));
-    bytes
-}
-
-fn write_rom_fixture(name: &str, contents: &[u8]) -> PathBuf {
-    let path = unique_rom_path(name);
-    fs::write(&path, contents).expect("test ROM should write");
-    path
-}
-
-fn load_runtime_session(path: PathBuf) -> RuntimeSession {
-    let mut app = App::new();
-    let outcome = app.open_path_with_confirmation(path, |_current, _next| true);
-    assert!(matches!(outcome, RustNES::shell::OpenRomOutcome::Loaded));
-
-    match app.into_state() {
-        AppState::Loaded(session) => *session,
-        state => panic!("expected runtime session, got {state:?}"),
-    }
-}
-
-fn write_loop_rom(name: &str) -> PathBuf {
-    let path = unique_rom_path(name);
-    write_rom(
-        &path,
-        &[
-            (0xC000, 0xEA),
-            (0xC001, 0x4C),
-            (0xC002, 0x00),
-            (0xC003, 0xC0),
-        ],
-        0xC000,
-    );
-    path
-}
+use support::runtime_script::{
+    build_ines_rom, load_runtime_session, write_loop_rom, write_rom_fixture,
+};
+use support::unique_temp_path;
 
 #[test]
 fn boot_with_initial_rom_enters_loaded_runtime_session() {
@@ -149,8 +101,45 @@ fn runtime_bootstrap_error_messages_stay_calm_and_explicit() {
 }
 
 #[test]
+fn runtime_debug_snapshot_includes_cpu_ppu_and_trace_details() {
+    let rom_path = write_loop_rom("debug-snapshot");
+    let mut session = load_runtime_session(rom_path.clone());
+
+    let advanced = session
+        .advance_until_next_frame()
+        .expect("runtime should produce a frame before dumping debug state");
+    assert!(advanced);
+
+    let snapshot = session.debug_snapshot_text();
+    assert!(snapshot.contains("RUNTIME DEBUG SNAPSHOT"));
+    assert!(snapshot.contains("CPU: PC="));
+    assert!(snapshot.contains("PPU: frame="));
+    assert!(snapshot.contains("RECENT TRACE:"));
+
+    let _ = std::fs::remove_file(&rom_path);
+}
+
+#[test]
+fn runtime_debug_hotkey_toggles_overlay() {
+    let rom_path = write_loop_rom("debug-hud-toggle");
+    let mut session = load_runtime_session(rom_path.clone());
+
+    assert!(!session.debug_overlay_visible());
+    session
+        .handle_runtime_key(KeyCode::F1, true, false)
+        .expect("F1 should toggle runtime debug HUD");
+    assert!(session.debug_overlay_visible());
+    session
+        .handle_runtime_key(KeyCode::F1, true, false)
+        .expect("F1 should toggle runtime debug HUD off");
+    assert!(!session.debug_overlay_visible());
+
+    let _ = std::fs::remove_file(&rom_path);
+}
+
+#[test]
 fn load_failures_remain_structured_for_bootstrap_paths() {
-    let missing = unique_rom_path("missing");
+    let missing = unique_temp_path("missing", "nes");
     let error = RustNES::shell::load_rom_from_path(&missing).expect_err("missing ROM should fail");
 
     match error {

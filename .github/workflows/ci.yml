@@ -45,6 +45,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Reject real ROM-backed tests
+        run: sh scripts/check-no-real-rom-tests.sh
+
       - name: Check unused dependencies
         run: cargo machete
 

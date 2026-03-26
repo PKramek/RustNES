@@ -1,7 +1,7 @@
+mod support;
+
 use std::ffi::OsString;
-use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use RustNES::core::cartridge::CartridgeError;
 use RustNES::shell::{
@@ -9,21 +9,7 @@ use RustNES::shell::{
     load_rom_from_path,
 };
 
-fn unique_rom_path(name: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time should move forward")
-        .as_nanos();
-    std::env::temp_dir().join(format!("rustnes-{name}-{nanos}.nes"))
-}
-
-fn build_ines_rom(prg_banks: u8, chr_banks: u8, flags6: u8, flags7: u8) -> Vec<u8> {
-    let mut bytes = vec![b'N', b'E', b'S', 0x1A, prg_banks, chr_banks, flags6, flags7];
-    bytes.extend_from_slice(&[0; 8]);
-    bytes.extend(std::iter::repeat_n(0xAA, prg_banks as usize * 0x4000));
-    bytes.extend(std::iter::repeat_n(0xBB, chr_banks as usize * 0x2000));
-    bytes
-}
+use support::runtime_script::{build_ines_rom, write_rom_fixture};
 
 struct Nes2RomSpec {
     prg_banks: u8,
@@ -61,12 +47,6 @@ fn build_nes2_rom(spec: Nes2RomSpec) -> Vec<u8> {
     bytes.extend(std::iter::repeat_n(0xAA, spec.prg_banks as usize * 0x4000));
     bytes.extend(std::iter::repeat_n(0xBB, spec.chr_banks as usize * 0x2000));
     bytes
-}
-
-fn write_rom_fixture(name: &str, contents: &[u8]) -> PathBuf {
-    let path = unique_rom_path(name);
-    fs::write(&path, contents).expect("test ROM should write");
-    path
 }
 
 #[test]

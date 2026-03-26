@@ -15,7 +15,7 @@ pub use load_rom::{LoadRomError, LoadedRom, load_rom_from_path};
 pub use runtime::{
     AudioInitError, InputBindings, InputState, NesButton, PauseMenuAction, PauseState,
     RuntimeActionError, RuntimeAudio, RuntimeBootstrapError, RuntimeMenuMode, RuntimePreferences,
-    RuntimeSession,
+    RuntimeSession, compose_runtime_frame,
 };
 pub use trace::TraceOptions;
 
