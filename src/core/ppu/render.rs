@@ -57,9 +57,7 @@ pub(crate) fn background_pixel_at(
     }
 
     let event = scroll_event_for_pixel(scroll_events, screen_x, screen_y);
-    let base_nametable = event.base_nametable;
-    let scroll_x = event.scroll_x as usize;
-    let scroll_y = event.scroll_y as usize;
+    let (base_nametable, scroll_x, scroll_y) = event_scroll_state(event);
     let world_x = scroll_x + screen_x;
     let world_y = scroll_y + screen_y;
 
@@ -97,6 +95,27 @@ pub(crate) fn background_pixel_at(
     };
 
     (color, palette_index != 0)
+}
+
+fn event_scroll_state(event: ScrollEvent) -> (u16, usize, usize) {
+    if event.dot == 0 {
+        return (
+            event.base_nametable,
+            event.scroll_x as usize,
+            event.scroll_y as usize,
+        );
+    }
+
+    let coarse_x = (event.temp_vram_addr & 0x001F) as usize;
+    let coarse_y = ((event.temp_vram_addr >> 5) & 0x001F) as usize;
+    let fine_y = ((event.temp_vram_addr >> 12) & 0x0007) as usize;
+    let fine_x = (event.fine_x_scroll & 0x07) as usize;
+
+    (
+        event.base_nametable,
+        coarse_x * 8 + fine_x,
+        coarse_y * 8 + fine_y,
+    )
 }
 
 fn scroll_event_for_pixel(
@@ -210,6 +229,93 @@ mod tests {
                 &cartridge
             ),
             (0x33, true)
+        );
+    }
+
+    #[test]
+    fn background_pixel_uses_latched_temp_vram_and_fine_x_state() {
+        let mut cartridge = chr_ram_cartridge();
+        let mut memory = PpuMemory::default();
+        let registers = PpuRegisters {
+            mask: MASK_SHOW_BACKGROUND,
+            ..PpuRegisters::default()
+        };
+
+        memory.write(0x0010, 0xFF, &mut cartridge);
+        memory.write(0x0018, 0x00, &mut cartridge);
+        memory.write(0x0020, 0x00, &mut cartridge);
+        memory.write(0x0028, 0xFF, &mut cartridge);
+        memory.write(0x2000, 0x01, &mut cartridge);
+        memory.write(0x2001, 0x02, &mut cartridge);
+        memory.write(0x2400, 0x02, &mut cartridge);
+        memory.write(0x3F00, 0x0F, &mut cartridge);
+        memory.write(0x3F01, 0x11, &mut cartridge);
+        memory.write(0x3F02, 0x22, &mut cartridge);
+
+        let scroll_events = [ScrollEvent {
+            scanline: 0,
+            dot: 1,
+            scroll_x: 0,
+            scroll_y: 0,
+            base_nametable: 0,
+            fine_x_scroll: 3,
+            temp_vram_addr: 0x0401,
+        }];
+
+        assert_eq!(
+            background_pixel_at(
+                &memory,
+                &registers,
+                &scroll_events,
+                0,
+                0,
+                0x0000,
+                &cartridge
+            ),
+            (0x22, true)
+        );
+    }
+
+    #[test]
+    fn visible_events_use_ctrl_nametable_when_temp_vram_was_polluted_by_ppuaddr() {
+        let mut cartridge = chr_ram_cartridge();
+        let mut memory = PpuMemory::default();
+        let registers = PpuRegisters {
+            mask: MASK_SHOW_BACKGROUND,
+            ..PpuRegisters::default()
+        };
+
+        memory.write(0x0010, 0xFF, &mut cartridge);
+        memory.write(0x0018, 0x00, &mut cartridge);
+        memory.write(0x0020, 0x00, &mut cartridge);
+        memory.write(0x0028, 0xFF, &mut cartridge);
+        memory.write(0x2000, 0x01, &mut cartridge);
+        memory.write(0x2001, 0x02, &mut cartridge);
+        memory.write(0x3F00, 0x0F, &mut cartridge);
+        memory.write(0x3F01, 0x11, &mut cartridge);
+        memory.write(0x3F02, 0x22, &mut cartridge);
+
+        let scroll_events = [ScrollEvent {
+            scanline: 0,
+            dot: 9,
+            scroll_x: 8,
+            scroll_y: 0,
+            base_nametable: 0,
+            fine_x_scroll: 0,
+            temp_vram_addr: 0x0C01,
+        }];
+
+        assert_eq!(
+            background_pixel_at(
+                &memory,
+                &registers,
+                &scroll_events,
+                0,
+                0,
+                0x0000,
+                &cartridge
+            ),
+            (0x22, true)
         );
     }
 }
