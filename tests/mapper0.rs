@@ -57,6 +57,17 @@ fn chr_ram_fallback_allows_ppu_writes() {
 }
 
 #[test]
+fn mapper0_exposes_prg_ram_at_6000() {
+    let mut cartridge = cartridge_from_bytes(&build_ines_rom(1, 1));
+
+    cartridge.cpu_write(0x6000, 0x12);
+    cartridge.cpu_write(0x7FFF, 0x34);
+
+    assert_eq!(cartridge.cpu_read(0x6000), 0x12);
+    assert_eq!(cartridge.cpu_read(0x7FFF), 0x34);
+}
+
+#[test]
 fn unsupported_mapper_remains_strictly_rejected() {
     let mut rom = build_ines_rom(1, 1);
     rom[6] = 0x10;

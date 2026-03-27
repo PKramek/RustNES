@@ -16,7 +16,7 @@ pub fn format_trace_line(record: &StepRecord) -> String {
     let (scanline, dot) = ppu_position(record.cyc_before);
 
     format!(
-        "{:04X}  {:<8} {:<32} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} PPU:{:>3},{:>3} CYC:{}",
+        "{:04X}  {:<9} {:<31} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} PPU:{:>3},{:>3} CYC:{}",
         record.pc_before,
         bytes,
         if operand.is_empty() {
@@ -84,6 +84,9 @@ fn format_operand(mode: AddressingMode, record: &StepRecord) -> String {
             .unwrap_or_default(),
         AddressingMode::Absolute => {
             let base = u16::from_le_bytes([record.bytes[1], record.bytes[2]]);
+            if matches!(record.opcode, 0x20 | 0x4C) {
+                return format!("${:04X}", base);
+            }
             match record.operand_value {
                 Some(value) => format!("${:04X} = {:02X}", base, value),
                 None => format!("${:04X}", base),

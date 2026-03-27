@@ -2,7 +2,7 @@ name: Rust CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
@@ -23,6 +23,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Linux system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -42,6 +45,9 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --all -- --check
+
+      - name: Reject real ROM-backed tests
+        run: sh scripts/check-no-real-rom-tests.sh
 
       - name: Check unused dependencies
         run: cargo machete

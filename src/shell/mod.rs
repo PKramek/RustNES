@@ -1,6 +1,7 @@
 mod app;
 mod launcher;
 mod load_rom;
+mod runtime;
 mod trace;
 
 use std::ffi::OsString;
@@ -11,6 +12,11 @@ use anyhow::Result;
 pub use app::{App, AppState, LoadFailure, LoadedSession, OpenRomOutcome};
 pub use launcher::Launcher;
 pub use load_rom::{LoadRomError, LoadedRom, load_rom_from_path};
+pub use runtime::{
+    AudioInitError, InputBindings, InputState, NesButton, PauseMenuAction, PauseState,
+    RuntimeActionError, RuntimeAudio, RuntimeBootstrapError, RuntimeMenuMode, RuntimePreferences,
+    RuntimeSession, compose_runtime_frame,
+};
 pub use trace::TraceOptions;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -55,8 +61,16 @@ pub fn run(command: ShellCommand) -> Result<()> {
         ShellCommand::Launcher(options) => {
             let launcher = Launcher::boot(options);
 
-            if let AppState::LoadFailed(failure) = launcher.state() {
-                eprintln!("{}", failure.message);
+            match launcher.into_app().into_state() {
+                AppState::Loaded(session) => {
+                    if let Err(error) = runtime::run(*session) {
+                        eprintln!("{}", error.diagnostic_message());
+                    }
+                }
+                AppState::LoadFailed(failure) => {
+                    eprintln!("{}", failure.message);
+                }
+                AppState::Launcher | AppState::Loading(_) => {}
             }
 
             Ok(())

@@ -1,4 +1,5 @@
 mod memory;
+mod palette;
 mod registers;
 mod render;
 mod sprites;
@@ -6,13 +7,14 @@ mod sprites;
 use crate::core::cartridge::Cartridge;
 
 use memory::PpuMemory;
+pub use palette::{RGBA_PIXEL_BYTES, palette_rgba, write_rgba_frame};
 use registers::PpuRegisters;
 pub use registers::{
     CTRL_NMI_ENABLE, CTRL_VRAM_INCREMENT, STATUS_SPRITE_OVERFLOW, STATUS_SPRITE_ZERO_HIT,
     STATUS_VBLANK,
 };
-use render::render_background_frame;
-use sprites::compose_sprites;
+use render::{background_pixel_at, render_background_frame};
+use sprites::{compose_sprites, sprite_zero_opaque_at};
 
 pub const SCREEN_WIDTH: usize = 256;
 pub const SCREEN_HEIGHT: usize = 240;
@@ -21,13 +23,17 @@ pub const PPU_DOTS_PER_SCANLINE: u16 = 341;
 pub const PPU_SCANLINES_PER_FRAME: i16 = 262;
 const PRE_RENDER_SCANLINE: i16 = 261;
 const VBLANK_START_SCANLINE: i16 = 241;
+const PRE_RENDER_CLEAR_DOT: u16 = 1;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ScrollEvent {
     pub scanline: usize,
+    pub dot: u16,
     pub scroll_x: u16,
     pub scroll_y: u16,
     pub base_nametable: u16,
+    pub fine_x_scroll: u8,
+    pub temp_vram_addr: u16,
 }
 
 #[derive(Debug)]
@@ -58,9 +64,12 @@ impl Default for Ppu {
             scroll_y: 0,
             scroll_events: vec![ScrollEvent {
                 scanline: 0,
+                dot: 0,
                 scroll_x: 0,
                 scroll_y: 0,
                 base_nametable: 0,
+                fine_x_scroll: 0,
+                temp_vram_addr: 0,
             }],
             scanline: 0,
             dot: 0,
@@ -135,6 +144,24 @@ impl Ppu {
         &self.framebuffer
     }
 
+    pub fn refresh_framebuffer(&mut self, cartridge: &Cartridge) -> bool {
+        render_background_frame(
+            &self.memory,
+            &self.registers,
+            &self.scroll_events,
+            &mut self.framebuffer,
+            &mut self.background_opaque,
+            cartridge,
+        );
+        compose_sprites(
+            &self.memory,
+            &self.registers,
+            &mut self.framebuffer,
+            &self.background_opaque,
+            cartridge,
+        )
+    }
+
     pub fn frame_ready(&self) -> bool {
         self.frame_ready
     }
@@ -167,7 +194,7 @@ impl Ppu {
     pub fn cpu_read_register(&mut self, addr: u16, cartridge: &Cartridge) -> u8 {
         match addr {
             0x2002 => {
-                let status = self.registers.status;
+                let status = self.cpu_visible_status();
                 self.registers.set_vblank(false);
                 self.registers.w = false;
                 status
@@ -211,32 +238,20 @@ impl Ppu {
             }
         }
 
+        self.update_sprite_zero_hit(cartridge);
+
         match (self.scanline, self.dot) {
             (VBLANK_START_SCANLINE, 1) => {
-                render_background_frame(
-                    &self.memory,
-                    &self.registers,
-                    &self.scroll_events,
-                    &mut self.framebuffer,
-                    &mut self.background_opaque,
-                    cartridge,
-                );
-                if compose_sprites(
-                    &self.memory,
-                    &self.registers,
-                    &mut self.framebuffer,
-                    &self.background_opaque,
-                    cartridge,
-                ) {
-                    self.registers.status |= STATUS_SPRITE_ZERO_HIT;
-                }
+                let _ = self.refresh_framebuffer(cartridge);
                 self.registers.set_vblank(true);
                 self.frame_ready = true;
             }
-            (PRE_RENDER_SCANLINE, 1) => {
+            (PRE_RENDER_SCANLINE, PRE_RENDER_CLEAR_DOT) => {
                 self.registers.clear_frame_flags();
                 self.scroll_events.clear();
-                self.scroll_events.push(self.current_scroll_event(0));
+                let mut event = self.current_scroll_event(0);
+                event.dot = 0;
+                self.scroll_events.push(event);
             }
             _ => {}
         }
@@ -291,6 +306,7 @@ impl Ppu {
             self.registers.t = (self.registers.t & 0x7F00) | value as u16;
             self.registers.v = self.registers.t;
             self.registers.w = false;
+            self.record_scroll_event();
         }
     }
 
@@ -305,22 +321,75 @@ impl Ppu {
     fn current_scroll_event(&self, scanline: usize) -> ScrollEvent {
         ScrollEvent {
             scanline,
+            dot: self.dot,
             scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,
             base_nametable: ((self.registers.ctrl as u16) & 0x03) << 10,
+            fine_x_scroll: self.registers.x & 0x07,
+            temp_vram_addr: self.registers.t & 0x3FFF,
         }
     }
 
     fn record_scroll_event(&mut self) {
-        let scanline = if (0..SCREEN_HEIGHT as i16).contains(&self.scanline) {
+        let visible_scanline = (0..SCREEN_HEIGHT as i16).contains(&self.scanline);
+        let scanline = if visible_scanline {
             self.scanline as usize
         } else {
             0
         };
-        let event = self.current_scroll_event(scanline);
+        let mut event = self.current_scroll_event(scanline);
+        if !visible_scanline {
+            event.dot = 0;
+        }
         match self.scroll_events.last_mut() {
-            Some(last) if last.scanline == scanline => *last = event,
+            Some(last) if last.scanline == scanline && last.dot == event.dot => *last = event,
             _ => self.scroll_events.push(event),
+        }
+    }
+
+    fn cpu_visible_status(&self) -> u8 {
+        self.registers.status
+    }
+
+    fn update_sprite_zero_hit(&mut self, cartridge: &Cartridge) {
+        if self.registers.status & STATUS_SPRITE_ZERO_HIT != 0 {
+            return;
+        }
+
+        if self.scanline < 0 || self.scanline >= SCREEN_HEIGHT as i16 {
+            return;
+        }
+
+        if self.dot == 0 || self.dot > SCREEN_WIDTH as u16 {
+            return;
+        }
+
+        let screen_x = (self.dot - 1) as usize;
+        let screen_y = self.scanline as usize;
+
+        if screen_x == SCREEN_WIDTH - 1 {
+            return;
+        }
+
+        let pattern_base = if self.registers.ctrl & render::CTRL_BACKGROUND_PATTERN_TABLE != 0 {
+            0x1000
+        } else {
+            0x0000
+        };
+        let (_, background_opaque) = background_pixel_at(
+            &self.memory,
+            &self.registers,
+            &self.scroll_events,
+            screen_x,
+            screen_y,
+            pattern_base,
+            cartridge,
+        );
+
+        if background_opaque
+            && sprite_zero_opaque_at(&self.memory, &self.registers, screen_x, screen_y, cartridge)
+        {
+            self.registers.status |= STATUS_SPRITE_ZERO_HIT;
         }
     }
 }

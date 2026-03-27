@@ -21,6 +21,7 @@ fn advance_to_vblank(bus: &mut Bus) {
     for _ in 0..((241 * 341 + 1) / 3) {
         bus.tick();
     }
+    bus.refresh_ppu_framebuffer();
 }
 
 #[test]
@@ -87,4 +88,64 @@ fn background_priority_keeps_background_visible_but_still_sets_sprite_zero_hit()
 
     assert_ne!(bus.ppu().status() & STATUS_SPRITE_ZERO_HIT, 0);
     assert_eq!(bus.ppu().framebuffer()[8 * 256 + 8], 0x11);
+}
+
+#[test]
+fn lower_oam_index_sprite_wins_when_sprites_overlap() {
+    let mut bus = Bus::new(chr_ram_cartridge());
+
+    write_ppu(&mut bus, 0x0010, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x0018, &[0x00; 8]);
+    write_ppu(&mut bus, 0x0020, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x0028, &[0x00; 8]);
+    write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
+    write_ppu(
+        &mut bus,
+        0x3F10,
+        &[0x0F, 0x2A, 0x2B, 0x2C, 0x0F, 0x16, 0x17, 0x18],
+    );
+
+    bus.write(0x2001, 0x10);
+    bus.write(0x2003, 0x00);
+
+    bus.write(0x2004, 0x07);
+    bus.write(0x2004, 0x01);
+    bus.write(0x2004, 0x00);
+    bus.write(0x2004, 0x08);
+
+    bus.write(0x2004, 0x07);
+    bus.write(0x2004, 0x02);
+    bus.write(0x2004, 0x01);
+    bus.write(0x2004, 0x08);
+
+    advance_to_vblank(&mut bus);
+
+    assert_eq!(bus.ppu().framebuffer()[8 * 256 + 8], 0x2A);
+}
+
+#[test]
+fn sprite_zero_hit_sets_during_visible_scanlines_before_vblank() {
+    let mut bus = Bus::new(chr_ram_cartridge());
+
+    write_ppu(&mut bus, 0x0010, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x0018, &[0x00; 8]);
+    write_ppu(&mut bus, 0x0020, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x0028, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x2000 + 32 + 1, &[0x01]);
+    write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
+    write_ppu(&mut bus, 0x3F10, &[0x0F, 0x2A, 0x2B, 0x2C]);
+
+    bus.write(0x2001, 0x18);
+    bus.write(0x2003, 0x00);
+    bus.write(0x2004, 0x07);
+    bus.write(0x2004, 0x02);
+    bus.write(0x2004, 0x00);
+    bus.write(0x2004, 0x08);
+
+    for _ in 0..((9 * 341 + 10) / 3) {
+        bus.tick();
+    }
+
+    assert_ne!(bus.ppu().status() & STATUS_SPRITE_ZERO_HIT, 0);
+    assert_eq!(bus.ppu().status() & 0x80, 0);
 }

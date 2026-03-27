@@ -2,6 +2,13 @@ use crate::core::bus::CpuBus;
 
 use super::Cpu;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum OperandBusPhase {
+    #[default]
+    Immediate,
+    Final,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AddressingMode {
     Implied,
@@ -23,6 +30,7 @@ pub enum AddressingMode {
 pub struct ResolvedOperand {
     pub addr: Option<u16>,
     pub value: Option<u8>,
+    pub bus_phase: OperandBusPhase,
     pub pointer_addr: Option<u16>,
     pub pointer_value: Option<u16>,
     pub branch_target: Option<u16>,
@@ -39,6 +47,24 @@ fn read_u16_zero_page(bus: &mut impl CpuBus, base: u8) -> u16 {
     let lo = bus.read(base as u16) as u16;
     let hi = bus.read(base.wrapping_add(1) as u16) as u16;
     (hi << 8) | lo
+}
+
+fn uses_final_bus_phase(addr: u16) -> bool {
+    matches!(addr, 0x2000..=0x4017)
+}
+
+fn operand_bus_phase_for_addr(addr: u16) -> OperandBusPhase {
+    if uses_final_bus_phase(addr) {
+        OperandBusPhase::Final
+    } else {
+        OperandBusPhase::Immediate
+    }
+}
+
+fn read_value_for_addr(bus: &mut impl CpuBus, addr: u16) -> (Option<u8>, OperandBusPhase) {
+    let bus_phase = operand_bus_phase_for_addr(addr);
+    let value = (bus_phase == OperandBusPhase::Immediate).then(|| bus.read(addr));
+    (value, bus_phase)
 }
 
 impl Cpu {
@@ -100,18 +126,22 @@ impl Cpu {
             }
             AddressingMode::Absolute => {
                 let addr = read_u16(bus, self.pc.wrapping_add(1));
+                let (value, bus_phase) = read_value_for_addr(bus, addr);
                 ResolvedOperand {
                     addr: Some(addr),
-                    value: Some(bus.read(addr)),
+                    value,
+                    bus_phase,
                     ..ResolvedOperand::default()
                 }
             }
             AddressingMode::AbsoluteX => {
                 let base = read_u16(bus, self.pc.wrapping_add(1));
                 let addr = base.wrapping_add(self.x as u16);
+                let (value, bus_phase) = read_value_for_addr(bus, addr);
                 ResolvedOperand {
                     addr: Some(addr),
-                    value: Some(bus.read(addr)),
+                    value,
+                    bus_phase,
                     page_crossed: (base & 0xFF00) != (addr & 0xFF00),
                     ..ResolvedOperand::default()
                 }
@@ -119,9 +149,11 @@ impl Cpu {
             AddressingMode::AbsoluteY => {
                 let base = read_u16(bus, self.pc.wrapping_add(1));
                 let addr = base.wrapping_add(self.y as u16);
+                let (value, bus_phase) = read_value_for_addr(bus, addr);
                 ResolvedOperand {
                     addr: Some(addr),
-                    value: Some(bus.read(addr)),
+                    value,
+                    bus_phase,
                     page_crossed: (base & 0xFF00) != (addr & 0xFF00),
                     ..ResolvedOperand::default()
                 }
@@ -143,9 +175,11 @@ impl Cpu {
                 let base = bus.read(self.pc.wrapping_add(1));
                 let pointer = base.wrapping_add(self.x);
                 let target = read_u16_zero_page(bus, pointer);
+                let (value, bus_phase) = read_value_for_addr(bus, target);
                 ResolvedOperand {
                     addr: Some(target),
-                    value: Some(bus.read(target)),
+                    value,
+                    bus_phase,
                     pointer_addr: Some(pointer as u16),
                     pointer_value: Some(target),
                     ..ResolvedOperand::default()
@@ -155,9 +189,11 @@ impl Cpu {
                 let pointer = bus.read(self.pc.wrapping_add(1));
                 let base = read_u16_zero_page(bus, pointer);
                 let addr = base.wrapping_add(self.y as u16);
+                let (value, bus_phase) = read_value_for_addr(bus, addr);
                 ResolvedOperand {
                     addr: Some(addr),
-                    value: Some(bus.read(addr)),
+                    value,
+                    bus_phase,
                     pointer_addr: Some(pointer as u16),
                     pointer_value: Some(base),
                     branch_target: None,

@@ -75,6 +75,46 @@ fn ppudata_reads_are_buffered_and_palette_reads_bypass_buffer() {
 }
 
 #[test]
+fn palette_reads_do_not_return_the_previous_palette_entry() {
+    let mut bus = Bus::new(mapper0_cartridge());
+
+    bus.write(0x2006, 0x3F);
+    bus.write(0x2006, 0x00);
+    bus.write(0x2007, 0x12);
+    bus.write(0x2007, 0x34);
+
+    bus.write(0x2006, 0x3F);
+    bus.write(0x2006, 0x00);
+    assert_eq!(bus.read(0x2007) & 0x3F, 0x12);
+    assert_ne!(bus.read(0x2007) & 0x3F, 0x12);
+    assert_eq!(bus.read(0x2007) & 0x3F, 0x00);
+}
+
+#[test]
+fn vram_reads_follow_blargg_buffering_sequence_at_2f00() {
+    let mut bus = Bus::new(mapper0_cartridge());
+
+    bus.write(0x2006, 0x2F);
+    bus.write(0x2006, 0x00);
+    bus.write(0x2007, 0x12);
+    bus.write(0x2007, 0x34);
+
+    bus.write(0x2006, 0x2F);
+    bus.write(0x2006, 0x00);
+    assert_eq!(bus.read(0x2007), 0x00);
+    assert_eq!(bus.read(0x2007), 0x12);
+
+    bus.write(0x2006, 0x2F);
+    bus.write(0x2006, 0x00);
+    bus.write(0x2007, 0x56);
+
+    bus.write(0x2006, 0x2F);
+    bus.write(0x2006, 0x00);
+    assert_eq!(bus.read(0x2007), 0x34);
+    assert_eq!(bus.read(0x2007), 0x56);
+}
+
+#[test]
 fn oamaddr_and_oamdata_write_into_oam() {
     let mut bus = Bus::new(mapper0_cartridge());
 
