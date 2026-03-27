@@ -1,8 +1,16 @@
+mod support;
+
 use std::path::PathBuf;
 
 use RustNES::core::cartridge::load_cartridge_from_bytes;
 use RustNES::shell::{
-    AudioInitError, LoadedRom, PauseState, RuntimeAudio, RuntimePreferences, RuntimeSession,
+    AudioInitError, LoadedRom, PauseState, RuntimeAudio, RuntimeMenuMode, RuntimePreferences,
+    RuntimeSession,
+};
+use winit::keyboard::KeyCode;
+
+use support::assertions::{
+    assert_audio_has_activity, assert_audio_samples_eq, assert_audio_silent,
 };
 
 fn mapper0_cartridge() -> RustNES::core::cartridge::Cartridge {
@@ -56,7 +64,12 @@ fn offline_audio_applies_master_volume_and_mute_immediately() {
     );
     audio.push_samples(&[1.0, -1.0]);
 
-    assert_eq!(audio.render_offline(2, 2), vec![0.5, 0.5, -0.5, -0.5]);
+    assert_audio_samples_eq(
+        &audio.render_offline(2, 2),
+        &[0.5, 0.5, -0.5, -0.5],
+        1.0e-6,
+        "offline playback should honor master volume",
+    );
 
     audio.apply_preferences(
         RuntimePreferences {
@@ -67,7 +80,11 @@ fn offline_audio_applies_master_volume_and_mute_immediately() {
     );
     audio.push_samples(&[1.0]);
 
-    assert_eq!(audio.render_offline(1, 2), vec![0.0, 0.0]);
+    assert_audio_silent(
+        &audio.render_offline(1, 2),
+        1.0e-6,
+        "muted offline playback should be silent",
+    );
 }
 
 #[test]
@@ -77,8 +94,75 @@ fn pause_silence_discards_stale_buffer_before_resume() {
     audio.push_samples(&[0.8, 0.6]);
 
     audio.apply_preferences(RuntimePreferences::default(), true);
-    assert_eq!(audio.render_offline(2, 2), vec![0.0, 0.0, 0.0, 0.0]);
+    assert_audio_silent(
+        &audio.render_offline(2, 2),
+        1.0e-6,
+        "pause should clear stale buffered samples",
+    );
 
     audio.apply_preferences(RuntimePreferences::default(), false);
-    assert_eq!(audio.render_offline(2, 2), vec![0.0, 0.0, 0.0, 0.0]);
+    assert_audio_silent(
+        &audio.render_offline(2, 2),
+        1.0e-6,
+        "resume should not replay discarded buffered samples",
+    );
+}
+
+#[test]
+fn paused_audio_controls_toggle_mute_and_adjust_volume() {
+    let mut session = runtime_session();
+    session.open_pause_menu();
+
+    for _ in 0..4 {
+        session
+            .handle_runtime_key(KeyCode::ArrowDown, true, false)
+            .expect("pause menu navigation should work");
+    }
+    assert!(matches!(
+        session.menu_mode(),
+        RuntimeMenuMode::PauseMenu { .. }
+    ));
+
+    session
+        .handle_runtime_key(KeyCode::Enter, true, false)
+        .expect("enter should open audio controls");
+    assert_eq!(session.menu_mode(), RuntimeMenuMode::AudioControls);
+
+    session
+        .handle_runtime_key(KeyCode::KeyM, true, false)
+        .expect("mute toggle should work while paused");
+    assert!(session.preferences().muted);
+
+    session
+        .handle_runtime_key(KeyCode::ArrowLeft, true, false)
+        .expect("volume down should work while paused");
+    assert!(session.preferences().master_volume < 1.0);
+
+    let volume_after_left = session.preferences().master_volume;
+    session
+        .handle_runtime_key(KeyCode::ArrowRight, true, false)
+        .expect("volume up should work while paused");
+    assert!(session.preferences().master_volume > volume_after_left);
+
+    let mut offline = RuntimeAudio::without_output(44_100);
+    offline.apply_preferences(session.preferences(), true);
+    offline.push_samples(&[0.75, -0.75]);
+    assert_audio_silent(
+        &offline.render_offline(2, 2),
+        1.0e-6,
+        "paused audio controls should keep playback silent",
+    );
+
+    session
+        .handle_runtime_key(KeyCode::KeyM, true, false)
+        .expect("mute toggle should work while paused");
+    assert!(!session.preferences().muted);
+
+    offline.apply_preferences(session.preferences(), false);
+    offline.push_samples(&[0.75, -0.75]);
+    assert_audio_has_activity(
+        &offline.render_offline(2, 2),
+        0.1,
+        "resumed audio should emit scaled samples",
+    );
 }

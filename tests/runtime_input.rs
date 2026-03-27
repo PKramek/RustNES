@@ -1,42 +1,12 @@
-use std::fs;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+mod support;
 
-use RustNES::shell::{App, AppState, NesButton, OpenRomOutcome, RuntimeSession};
+use RustNES::shell::{NesButton, RuntimeSession};
 use winit::keyboard::KeyCode;
 
-fn unique_rom_path(name: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time should move forward")
-        .as_nanos();
-    std::env::temp_dir().join(format!("rustnes-input-{name}-{nanos}.nes"))
-}
-
-fn build_ines_rom(prg_banks: u8, chr_banks: u8, flags6: u8, flags7: u8) -> Vec<u8> {
-    let mut bytes = vec![b'N', b'E', b'S', 0x1A, prg_banks, chr_banks, flags6, flags7];
-    bytes.extend_from_slice(&[0; 8]);
-    bytes.extend(std::iter::repeat_n(0xAA, prg_banks as usize * 0x4000));
-    bytes.extend(std::iter::repeat_n(0xBB, chr_banks as usize * 0x2000));
-    bytes
-}
-
-fn write_rom_fixture(name: &str, contents: &[u8]) -> PathBuf {
-    let path = unique_rom_path(name);
-    fs::write(&path, contents).expect("test ROM should write");
-    path
-}
+use support::runtime_script::{build_ines_rom, load_runtime_session_from_bytes};
 
 fn load_runtime_session() -> RuntimeSession {
-    let path = write_rom_fixture("runtime-input", &build_ines_rom(1, 1, 0, 0));
-    let mut app = App::new();
-    let outcome = app.open_path_with_confirmation(path, |_current, _next| true);
-    assert_eq!(outcome, OpenRomOutcome::Loaded);
-
-    match app.into_state() {
-        AppState::Loaded(session) => *session,
-        state => panic!("expected runtime session, got {state:?}"),
-    }
+    load_runtime_session_from_bytes("runtime-input", &build_ines_rom(1, 1, 0, 0))
 }
 
 #[test]

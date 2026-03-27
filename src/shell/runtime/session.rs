@@ -1,9 +1,11 @@
+use std::collections::VecDeque;
+
 use thiserror::Error;
 use winit::keyboard::KeyCode;
 
 use crate::core::cartridge::Cartridge;
 use crate::core::console::Console;
-use crate::core::cpu::CpuError;
+use crate::core::cpu::{CpuError, StepRecord, format_trace_line};
 use crate::core::ppu::FRAMEBUFFER_LEN;
 
 use super::super::{LoadRomError, LoadedRom, load_rom_from_path};
@@ -11,6 +13,7 @@ use super::audio::{AudioInitError, RuntimeAudio};
 use super::input::{InputBindings, InputState, NesButton, PauseMenuAction, RuntimeMenuMode};
 
 const FRAME_STEP_LIMIT: usize = 100_000;
+const RECENT_TRACE_CAPACITY: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RuntimePreferences {
@@ -74,6 +77,8 @@ pub struct RuntimeSession {
     input_state: InputState,
     menu_mode: RuntimeMenuMode,
     last_presented_frame: [u8; FRAMEBUFFER_LEN],
+    debug_overlay_visible: bool,
+    recent_steps: VecDeque<StepRecord>,
 }
 
 impl RuntimeSession {
@@ -92,6 +97,8 @@ impl RuntimeSession {
             input_state: InputState::default(),
             menu_mode: RuntimeMenuMode::Hidden,
             last_presented_frame: [0; FRAMEBUFFER_LEN],
+            debug_overlay_visible: false,
+            recent_steps: VecDeque::with_capacity(RECENT_TRACE_CAPACITY),
         };
         let mut session = session;
         session.sync_runtime_state();
@@ -146,6 +153,86 @@ impl RuntimeSession {
         }
     }
 
+    pub fn selected_remap_button(&self) -> Option<NesButton> {
+        match self.menu_mode {
+            RuntimeMenuMode::RemapControls { selected } => Some(selected),
+            _ => None,
+        }
+    }
+
+    pub fn debug_overlay_visible(&self) -> bool {
+        self.debug_overlay_visible
+    }
+
+    pub fn toggle_debug_overlay(&mut self) {
+        self.debug_overlay_visible = !self.debug_overlay_visible;
+    }
+
+    pub fn debug_snapshot_text(&self) -> String {
+        let cpu = self.console.cpu();
+        let bus = self.console.bus();
+        let ppu = bus.ppu();
+        let controller1 = bus.controller1();
+
+        let mut lines = vec![
+            String::from("RUNTIME DEBUG SNAPSHOT"),
+            format!("ROM: {}", self.rom.source_path.display()),
+            format!(
+                "STATE: pause={:?} menu={:?} volume={:.0}% muted={} debug_hud={}",
+                self.pause_state,
+                self.menu_mode,
+                self.preferences.master_volume * 100.0,
+                self.preferences.muted,
+                self.debug_overlay_visible,
+            ),
+            format!(
+                "CPU: PC={:04X} A={:02X} X={:02X} Y={:02X} SP={:02X} P={:02X} cycles={} instructions={}",
+                cpu.pc,
+                cpu.a,
+                cpu.x,
+                cpu.y,
+                cpu.sp,
+                cpu.status,
+                cpu.total_cycles,
+                cpu.instruction_count,
+            ),
+            format!(
+                "PPU: frame={} scanline={} dot={} status={:02X} ctrl={:02X} mask={:02X} frame_ready={} nmi_line={}",
+                ppu.frame(),
+                ppu.scanline(),
+                ppu.dot(),
+                ppu.status(),
+                ppu.ctrl(),
+                ppu.mask(),
+                ppu.frame_ready(),
+                ppu.nmi_line(),
+            ),
+            format!(
+                "INPUT: resolved_mask={:02X} latched={:02X} shift={:02X} strobe_high={}",
+                self.resolved_button_mask(),
+                controller1.latched_buttons(),
+                controller1.shift_register(),
+                controller1.strobe_high(),
+            ),
+        ];
+
+        if !self.recent_steps.is_empty() {
+            lines.push(String::from("RECENT TRACE:"));
+            lines.extend(self.recent_trace_lines(12));
+        }
+
+        lines.join("\n")
+    }
+
+    pub fn recent_trace_lines(&self, limit: usize) -> Vec<String> {
+        self.recent_steps
+            .iter()
+            .rev()
+            .take(limit)
+            .map(format_trace_line)
+            .collect()
+    }
+
     pub fn begin_remap_controls(&mut self) {
         self.pause_state = PauseState::Paused;
         self.menu_mode = RuntimeMenuMode::RemapControls {
@@ -178,7 +265,16 @@ impl RuntimeSession {
             return Ok(false);
         }
 
-        let advanced = self.console.run_until_next_frame(FRAME_STEP_LIMIT)?;
+        let start_frame = self.console.bus().ppu().frame();
+        let mut advanced = false;
+        for _ in 0..FRAME_STEP_LIMIT {
+            let record = self.console.step_instruction()?;
+            self.record_step(record);
+            if self.console.bus().ppu().frame() > start_frame {
+                advanced = true;
+                break;
+            }
+        }
         self.sync_audio();
         self.refresh_last_presented_frame();
         Ok(advanced)
@@ -210,11 +306,30 @@ impl RuntimeSession {
         pressed: bool,
         repeat: bool,
     ) -> Result<(), RuntimeActionError> {
+        if pressed && !repeat {
+            match key {
+                KeyCode::F1 => {
+                    self.toggle_debug_overlay();
+                    return Ok(());
+                }
+                KeyCode::F2 => {
+                    eprintln!("{}", self.debug_snapshot_text());
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+
         if key == KeyCode::Escape && pressed && !repeat {
-            if self.is_paused() {
-                self.resume();
-            } else {
-                self.open_pause_menu();
+            match self.menu_mode {
+                RuntimeMenuMode::Hidden => self.open_pause_menu(),
+                RuntimeMenuMode::PauseMenu { .. } => self.resume(),
+                RuntimeMenuMode::RemapControls { .. } => {
+                    self.handle_remap_controls_key(key);
+                }
+                RuntimeMenuMode::AudioControls => {
+                    self.handle_audio_controls_key(key);
+                }
             }
             return Ok(());
         }
@@ -260,6 +375,7 @@ impl RuntimeSession {
 
     pub fn soft_reset(&mut self) {
         self.console.reset();
+        self.recent_steps.clear();
         self.input_state.clear();
         self.refresh_last_presented_frame();
         self.sync_runtime_state();
@@ -285,6 +401,7 @@ impl RuntimeSession {
         self.bindings = bindings;
         self.pause_state = pause_state;
         self.menu_mode = menu_mode;
+        self.recent_steps.clear();
         self.input_state.clear();
         self.refresh_last_presented_frame();
         self.sync_runtime_state();
@@ -324,6 +441,13 @@ impl RuntimeSession {
     fn sync_runtime_state(&mut self) {
         self.sync_controller1();
         self.sync_audio();
+    }
+
+    fn record_step(&mut self, record: StepRecord) {
+        if self.recent_steps.len() == RECENT_TRACE_CAPACITY {
+            let _ = self.recent_steps.pop_front();
+        }
+        self.recent_steps.push_back(record);
     }
 
     fn handle_pause_menu_key(&mut self, key: KeyCode) -> Result<(), RuntimeActionError> {

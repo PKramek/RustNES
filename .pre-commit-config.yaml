@@ -4,6 +4,16 @@ fail_fast: true
 repos:
   - repo: local
     hooks:
+      - id: no-real-rom-tests
+        name: No Real ROM Tests
+        description: Reject committed tests that load local ROM packs.
+        entry: sh scripts/check-no-real-rom-tests.sh
+        language: system
+        always_run: true
+        types: [rust]
+        stages: [pre-commit, pre-push]
+        pass_filenames: false
+
       - id: rustfmt
         name: Rust Formatter
         description: Enforce canonical formatting before commits.
