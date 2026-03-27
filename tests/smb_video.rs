@@ -1,12 +1,28 @@
+mod support;
+
 use RustNES::core::bus::{Bus, CpuBus};
 use RustNES::core::cartridge::load_cartridge_from_bytes;
+use RustNES::core::console::Console;
 use RustNES::core::ppu::STATUS_SPRITE_ZERO_HIT;
+
+use support::cartridge_from_program;
 
 fn chr_ram_cartridge() -> RustNES::core::cartridge::Cartridge {
     let mut rom = vec![b'N', b'E', b'S', 0x1A, 1, 0, 0, 0];
     rom.extend_from_slice(&[0; 8]);
     rom.extend(std::iter::repeat_n(0xEA, 0x4000));
     load_cartridge_from_bytes(&rom).expect("CHR-RAM fixture should build")
+}
+
+fn chr_ram_console() -> Console {
+    let mut console = Console::new(cartridge_from_program(
+        &[(0xC000, 0xEA)],
+        0xC000,
+        0xC000,
+        0xC000,
+    ));
+    console.reset();
+    console
 }
 
 fn write_ppu(bus: &mut Bus, addr: u16, bytes: &[u8]) {
@@ -21,6 +37,7 @@ fn advance_cpu_ticks(bus: &mut Bus, ticks: usize) {
     for _ in 0..ticks {
         bus.tick();
     }
+    bus.refresh_ppu_framebuffer();
 }
 
 #[test]
@@ -81,4 +98,54 @@ fn smb_style_title_frame_is_stable_across_repeated_frames() {
     let second_frame = bus.ppu().framebuffer().to_vec();
 
     assert_eq!(first_frame, second_frame);
+}
+
+#[test]
+fn console_frame_advance_keeps_the_vblank_latched_split_frame() {
+    let mut console = chr_ram_console();
+    let bus = console.bus_mut();
+    let mut nametable = [0u8; 0x400];
+    for row in 0..30 {
+        nametable[row * 32] = 0x01;
+        nametable[row * 32 + 1] = 0x02;
+    }
+
+    write_ppu(bus, 0x0010, &[0xFF; 8]);
+    write_ppu(bus, 0x0018, &[0x00; 8]);
+    write_ppu(bus, 0x0020, &[0x00; 8]);
+    write_ppu(bus, 0x0028, &[0xFF; 8]);
+    write_ppu(bus, 0x0030, &[0xFF; 8]);
+    write_ppu(bus, 0x0038, &[0xFF; 8]);
+    write_ppu(bus, 0x2000, &nametable);
+    write_ppu(bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
+    write_ppu(bus, 0x3F10, &[0x0F, 0x2A, 0x2B, 0x2C]);
+
+    bus.write(0x2001, 0x18);
+    bus.write(0x2005, 0x00);
+    bus.write(0x2005, 0x00);
+
+    bus.write(0x2003, 0x00);
+    bus.write(0x2004, 39);
+    bus.write(0x2004, 0x03);
+    bus.write(0x2004, 0x00);
+    bus.write(0x2004, 0x00);
+
+    for _ in 0..((40 * 341) / 3 + 1) {
+        bus.tick();
+    }
+    bus.write(0x2005, 0x08);
+    bus.write(0x2005, 0x00);
+    for _ in 0..(((241 - 40) * 341) / 3 + 2) {
+        bus.tick();
+    }
+
+    let expected_frame = bus.ppu().framebuffer().to_vec();
+    assert!(bus.ppu().frame_ready());
+
+    let advanced = console
+        .run_until_next_frame(10_000)
+        .expect("NOP program should advance past the current frame boundary");
+
+    assert!(advanced);
+    assert_eq!(console.bus().ppu().framebuffer().to_vec(), expected_frame);
 }

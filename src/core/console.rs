@@ -78,8 +78,24 @@ impl Console {
         Ok(false)
     }
 
+    pub fn refresh_framebuffer(&mut self) {
+        self.bus.refresh_ppu_framebuffer();
+    }
+
     pub fn take_frame_ready(&mut self) -> bool {
         self.bus.ppu_mut().take_frame_ready()
+    }
+
+    pub fn take_audio_samples(&mut self) -> Vec<f32> {
+        self.bus.take_audio_samples()
+    }
+
+    pub fn audio_sample_rate(&self) -> u32 {
+        self.bus.audio_sample_rate()
+    }
+
+    pub fn set_audio_sample_rate(&mut self, sample_rate: u32) {
+        self.bus.set_audio_sample_rate(sample_rate);
     }
 
     fn service_nmi_edge(&mut self, nmi_before: bool) {

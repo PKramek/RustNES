@@ -1,3 +1,4 @@
+use crate::core::apu::Apu;
 use crate::core::cartridge::Cartridge;
 use crate::core::io::{ControllerPort, OamDmaPort};
 use crate::core::ppu::Ppu;
@@ -21,6 +22,7 @@ pub struct Bus {
     cpu_ram: [u8; 0x800],
     cartridge: Cartridge,
     ppu: Ppu,
+    apu: Apu,
     controller1: ControllerPort,
     controller2: ControllerPort,
     dma: OamDmaPort,
@@ -34,6 +36,7 @@ impl Bus {
             cpu_ram: [0; 0x800],
             cartridge,
             ppu: Ppu::default(),
+            apu: Apu::default(),
             controller1: ControllerPort::default(),
             controller2: ControllerPort::default(),
             dma: OamDmaPort::default(),
@@ -74,6 +77,19 @@ impl Bus {
         &mut self.ppu
     }
 
+    pub fn refresh_ppu_framebuffer(&mut self) {
+        let (ppu, cartridge) = (&mut self.ppu, &self.cartridge);
+        let _ = ppu.refresh_framebuffer(cartridge);
+    }
+
+    pub fn apu(&self) -> &Apu {
+        &self.apu
+    }
+
+    pub fn apu_mut(&mut self) -> &mut Apu {
+        &mut self.apu
+    }
+
     pub fn controller1(&self) -> &ControllerPort {
         &self.controller1
     }
@@ -98,6 +114,18 @@ impl Bus {
         self.total_cpu_cycles
     }
 
+    pub fn take_audio_samples(&mut self) -> Vec<f32> {
+        self.apu.take_samples()
+    }
+
+    pub fn audio_sample_rate(&self) -> u32 {
+        self.apu.sample_rate()
+    }
+
+    pub fn set_audio_sample_rate(&mut self, sample_rate: u32) {
+        self.apu.set_sample_rate(sample_rate);
+    }
+
     pub fn read_u16(&mut self, addr: u16) -> u16 {
         let lo = self.read(addr) as u16;
         let hi = self.read(addr.wrapping_add(1)) as u16;
@@ -120,6 +148,7 @@ impl CpuBus for Bus {
                 let normalized = Self::normalize_ppu_register_addr(addr);
                 self.ppu.cpu_read_register(normalized, &self.cartridge)
             }
+            0x4015 => self.apu.read_status(),
             0x4014 => self.dma.last_page().unwrap_or(0),
             0x4016 => self.controller1.read(),
             0x4017 => self.controller2.read(),
@@ -136,6 +165,7 @@ impl CpuBus for Bus {
                 let (ppu, cartridge) = (&mut self.ppu, &mut self.cartridge);
                 ppu.cpu_write_register(normalized, value, cartridge);
             }
+            0x4000..=0x4013 | 0x4015 => self.apu.write_register(addr, value),
             0x4014 => {
                 self.dma.request(value);
                 let start = (value as u16) << 8;
@@ -146,8 +176,11 @@ impl CpuBus for Bus {
                 self.ppu.oam_dma(&page);
                 self.dma.clear();
             }
-            0x4016 => self.controller1.write_strobe(value),
-            0x4017 => self.controller2.write_strobe(value),
+            0x4016 => {
+                self.controller1.write_strobe(value);
+                self.controller2.write_strobe(value);
+            }
+            0x4017 => self.apu.write_register(addr, value),
             0x4020..=0xFFFF => self.cartridge.cpu_write(addr, value),
             _ => {}
         }
@@ -155,6 +188,7 @@ impl CpuBus for Bus {
 
     fn tick(&mut self) {
         self.total_cpu_cycles += 1;
+        self.apu.tick();
         for _ in 0..3 {
             self.ppu.tick(&self.cartridge);
         }

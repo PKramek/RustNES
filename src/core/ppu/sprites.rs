@@ -27,7 +27,7 @@ pub fn compose_sprites(
 
     let mut sprite_zero_hit = false;
 
-    for sprite_index in 0..64 {
+    for sprite_index in (0..64).rev() {
         let base = (sprite_index * 4) as u8;
         let y = memory.oam_read(base) as usize + 1;
         let tile = memory.oam_read(base.wrapping_add(1));
@@ -85,4 +85,51 @@ pub fn compose_sprites(
     }
 
     sprite_zero_hit
+}
+
+pub(crate) fn sprite_zero_opaque_at(
+    memory: &PpuMemory,
+    registers: &PpuRegisters,
+    screen_x: usize,
+    screen_y: usize,
+    cartridge: &Cartridge,
+) -> bool {
+    if registers.mask & MASK_SHOW_SPRITES == 0 {
+        return false;
+    }
+
+    let pattern_base = if registers.ctrl & CTRL_SPRITE_PATTERN_TABLE != 0 {
+        0x1000
+    } else {
+        0x0000
+    };
+
+    let y = memory.oam_read(0x00) as usize + 1;
+    let tile = memory.oam_read(0x01);
+    let attr = memory.oam_read(0x02);
+    let x = memory.oam_read(0x03) as usize;
+
+    if screen_y < y || screen_y >= y + 8 || screen_x < x || screen_x >= x + 8 {
+        return false;
+    }
+
+    let row = screen_y - y;
+    let column = screen_x - x;
+    let pattern_row = if attr & ATTR_FLIP_VERTICAL != 0 {
+        7 - row
+    } else {
+        row
+    };
+    let pattern_addr = pattern_base + (tile as u16) * 16 + pattern_row as u16;
+    let low_plane = memory.peek(pattern_addr, cartridge);
+    let high_plane = memory.peek(pattern_addr + 8, cartridge);
+    let fine_x = if attr & ATTR_FLIP_HORIZONTAL != 0 {
+        column
+    } else {
+        7 - column
+    };
+    let color_low = (low_plane >> fine_x) & 0x01;
+    let color_high = (high_plane >> fine_x) & 0x01;
+
+    ((color_high << 1) | color_low) != 0
 }
