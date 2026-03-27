@@ -1,7 +1,7 @@
 use crate::core::bus::CpuBus;
 
 use super::{
-    AddressingMode, Cpu, CpuError, ResolvedOperand, STATUS_CARRY, STATUS_DECIMAL,
+    AddressingMode, Cpu, CpuError, OperandBusPhase, ResolvedOperand, STATUS_CARRY, STATUS_DECIMAL,
     STATUS_INTERRUPT_DISABLE, STATUS_NEGATIVE, STATUS_OVERFLOW, STATUS_ZERO, StepRecord,
     opcode_meta,
 };
@@ -60,7 +60,7 @@ impl Cpu {
             0x00 => self.service_brk(bus),
             0x01 | 0x05 | 0x09 | 0x0D | 0x11 | 0x15 | 0x19 | 0x1D => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "ORA");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "ORA");
                 self.a |= value;
                 self.set_zero_negative(self.a);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -90,7 +90,7 @@ impl Cpu {
             }
             0x21 | 0x25 | 0x29 | 0x2D | 0x31 | 0x35 | 0x39 | 0x3D => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "AND");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "AND");
                 self.a &= value;
                 self.set_zero_negative(self.a);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -106,7 +106,7 @@ impl Cpu {
             }
             0x24 | 0x2C => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "BIT");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "BIT");
                 self.set_flag(STATUS_ZERO, self.a & value == 0);
                 self.set_flag(STATUS_NEGATIVE, value & STATUS_NEGATIVE != 0);
                 self.set_flag(STATUS_OVERFLOW, value & STATUS_OVERFLOW != 0);
@@ -142,7 +142,7 @@ impl Cpu {
             0x40 => self.return_from_interrupt(bus),
             0x41 | 0x45 | 0x49 | 0x4D | 0x51 | 0x55 | 0x59 | 0x5D => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "EOR");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "EOR");
                 self.a ^= value;
                 self.set_zero_negative(self.a);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -183,7 +183,7 @@ impl Cpu {
             }
             0x61 | 0x65 | 0x69 | 0x6D | 0x71 | 0x75 | 0x79 | 0x7D => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "ADC");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "ADC");
                 self.adc(value);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, operand.page_crossed, pre_ticks);
@@ -219,46 +219,23 @@ impl Cpu {
                 self.tick(bus, base_cycles);
             }
             0x81 | 0x85 | 0x8D | 0x91 | 0x95 | 0x99 | 0x9D => {
-                let pre_ticks = self.write_operand_with_timing(
-                    bus,
-                    mode,
-                    base_cycles,
-                    operand.addr.expect("STA requires target address"),
-                    self.a,
-                );
+                let pre_ticks = self.write_operand_on_bus_phase(bus, base_cycles, operand, self.a);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, false, pre_ticks);
             }
             0x83 | 0x87 | 0x8F | 0x97 => {
-                let pre_ticks = self.write_operand_with_timing(
-                    bus,
-                    mode,
-                    base_cycles,
-                    operand.addr.expect("SAX requires target address"),
-                    self.a & self.x,
-                );
+                let pre_ticks =
+                    self.write_operand_on_bus_phase(bus, base_cycles, operand, self.a & self.x);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, false, pre_ticks);
             }
             0x84 | 0x8C | 0x94 => {
-                let pre_ticks = self.write_operand_with_timing(
-                    bus,
-                    mode,
-                    base_cycles,
-                    operand.addr.expect("STY requires target address"),
-                    self.y,
-                );
+                let pre_ticks = self.write_operand_on_bus_phase(bus, base_cycles, operand, self.y);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, false, pre_ticks);
             }
             0x86 | 0x8E | 0x96 => {
-                let pre_ticks = self.write_operand_with_timing(
-                    bus,
-                    mode,
-                    base_cycles,
-                    operand.addr.expect("STX requires target address"),
-                    self.x,
-                );
+                let pre_ticks = self.write_operand_on_bus_phase(bus, base_cycles, operand, self.x);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, false, pre_ticks);
             }
@@ -288,7 +265,7 @@ impl Cpu {
             }
             0xA0 | 0xA4 | 0xAC | 0xB4 | 0xBC => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "LDY");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "LDY");
                 self.y = value;
                 self.set_zero_negative(self.y);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -296,7 +273,7 @@ impl Cpu {
             }
             0xA1 | 0xA5 | 0xA9 | 0xAD | 0xB1 | 0xB5 | 0xB9 | 0xBD => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "LDA");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "LDA");
                 self.a = value;
                 self.set_zero_negative(self.a);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -304,7 +281,7 @@ impl Cpu {
             }
             0xA3 | 0xA7 | 0xAF | 0xB3 | 0xB7 | 0xBF => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "LAX");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "LAX");
                 self.a = value;
                 self.x = value;
                 self.set_zero_negative(value);
@@ -313,7 +290,7 @@ impl Cpu {
             }
             0xA2 | 0xA6 | 0xAE | 0xB6 | 0xBE => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "LDX");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "LDX");
                 self.x = value;
                 self.set_zero_negative(self.x);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
@@ -345,14 +322,14 @@ impl Cpu {
             }
             0xC0 | 0xC4 | 0xCC => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "CPY");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "CPY");
                 self.compare(self.y, value);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, false, pre_ticks);
             }
             0xC1 | 0xC5 | 0xC9 | 0xCD | 0xD1 | 0xD5 | 0xD9 | 0xDD => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "CMP");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "CMP");
                 self.compare(self.a, value);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, operand.page_crossed, pre_ticks);
@@ -397,14 +374,14 @@ impl Cpu {
             }
             0xE0 | 0xE4 | 0xEC => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "CPX");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "CPX");
                 self.compare(self.x, value);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, false, pre_ticks);
             }
             0xE1 | 0xE5 | 0xE9 | 0xED | 0xF1 | 0xF5 | 0xF9 | 0xFD => {
                 let (value, pre_ticks) =
-                    self.read_operand_value(bus, mode, base_cycles, operand, "SBC");
+                    self.read_operand_on_bus_phase(bus, base_cycles, operand, "SBC");
                 self.sbc(value);
                 self.pc = self.next_pc(opcode_meta(opcode).bytes);
                 self.finish_operand_cycles(bus, base_cycles, operand.page_crossed, pre_ticks);
@@ -544,45 +521,48 @@ impl Cpu {
         result
     }
 
-    fn read_operand_value(
+    fn read_operand_on_bus_phase(
         &mut self,
         bus: &mut impl CpuBus,
-        mode: AddressingMode,
         base_cycles: u8,
         operand: ResolvedOperand,
         name: &'static str,
     ) -> (u8, u8) {
-        match (mode, operand.addr, operand.value) {
-            (AddressingMode::Absolute, Some(addr), None) if Self::is_timed_io_addr(addr) => {
-                let pre_ticks = base_cycles.saturating_sub(1);
+        match (operand.bus_phase, operand.addr, operand.value) {
+            (OperandBusPhase::Immediate, _, Some(value)) => (value, 0),
+            (OperandBusPhase::Final, Some(addr), _) => {
+                let pre_ticks = base_cycles
+                    .saturating_add(u8::from(operand.page_crossed))
+                    .saturating_sub(3);
                 self.tick(bus, pre_ticks);
                 (bus.read(addr), pre_ticks)
             }
-            _ => (
-                operand
-                    .value
-                    .unwrap_or_else(|| panic!("{name} requires operand value")),
-                0,
-            ),
+            (_, _, Some(value)) => (value, 0),
+            _ => panic!("{name} requires operand value"),
         }
     }
 
-    fn write_operand_with_timing(
+    fn write_operand_on_bus_phase(
         &mut self,
         bus: &mut impl CpuBus,
-        mode: AddressingMode,
         base_cycles: u8,
-        addr: u16,
+        operand: ResolvedOperand,
         value: u8,
     ) -> u8 {
-        if mode == AddressingMode::Absolute && Self::is_timed_io_addr(addr) {
-            let pre_ticks = base_cycles.saturating_sub(1);
-            self.tick(bus, pre_ticks);
-            bus.write(addr, value);
-            pre_ticks
-        } else {
-            bus.write(addr, value);
-            0
+        let addr = operand.addr.expect("memory operand requires address");
+        match operand.bus_phase {
+            OperandBusPhase::Immediate => {
+                bus.write(addr, value);
+                0
+            }
+            OperandBusPhase::Final => {
+                let pre_ticks = base_cycles
+                    .saturating_add(u8::from(operand.page_crossed))
+                    .saturating_sub(2);
+                self.tick(bus, pre_ticks);
+                bus.write(addr, value);
+                pre_ticks
+            }
         }
     }
 
@@ -596,9 +576,5 @@ impl Cpu {
         let total_cycles = base_cycles.saturating_add(u8::from(page_crossed));
         let remaining_cycles = total_cycles.saturating_sub(pre_ticks);
         self.tick(bus, remaining_cycles);
-    }
-
-    fn is_timed_io_addr(addr: u16) -> bool {
-        matches!(addr, 0x2000..=0x4017)
     }
 }

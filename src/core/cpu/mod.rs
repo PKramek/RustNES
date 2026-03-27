@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::core::bus::{CpuBus, InterruptLines};
 
-pub use addressing::{AddressingMode, ResolvedOperand};
+pub use addressing::{AddressingMode, OperandBusPhase, ResolvedOperand};
 pub use opcode::{OPCODES, OpcodeMeta, opcode_meta};
 pub use trace::{format_trace_line, format_trace_lines};
 

@@ -23,7 +23,7 @@ pub const PPU_DOTS_PER_SCANLINE: u16 = 341;
 pub const PPU_SCANLINES_PER_FRAME: i16 = 262;
 const PRE_RENDER_SCANLINE: i16 = 261;
 const VBLANK_START_SCANLINE: i16 = 241;
-const CPU_VISIBLE_PPU_PHASE_OFFSET: u16 = 3;
+const PRE_RENDER_CLEAR_DOT: u16 = 1;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ScrollEvent {
@@ -246,10 +246,12 @@ impl Ppu {
                 self.registers.set_vblank(true);
                 self.frame_ready = true;
             }
-            (PRE_RENDER_SCANLINE, 1) => {
+            (PRE_RENDER_SCANLINE, PRE_RENDER_CLEAR_DOT) => {
                 self.registers.clear_frame_flags();
                 self.scroll_events.clear();
-                self.scroll_events.push(self.current_scroll_event(0));
+                let mut event = self.current_scroll_event(0);
+                event.dot = 0;
+                self.scroll_events.push(event);
             }
             _ => {}
         }
@@ -346,96 +348,7 @@ impl Ppu {
     }
 
     fn cpu_visible_status(&self) -> u8 {
-        let mut status = self.registers.status;
-        let (future_scanline, future_dot) =
-            self.advance_position(self.scanline, self.dot, CPU_VISIBLE_PPU_PHASE_OFFSET);
-
-        if self.position_passes_vblank_edge(self.scanline, self.dot, future_scanline, future_dot) {
-            status |= STATUS_VBLANK;
-        }
-
-        if self.position_passes_pre_render_clear_edge(
-            self.scanline,
-            self.dot,
-            future_scanline,
-            future_dot,
-        ) {
-            status &= !STATUS_VBLANK;
-        }
-
-        status
-    }
-
-    fn advance_position(&self, mut scanline: i16, mut dot: u16, steps: u16) -> (i16, u16) {
-        for _ in 0..steps {
-            dot += 1;
-            if dot >= PPU_DOTS_PER_SCANLINE {
-                dot = 0;
-                scanline += 1;
-                if scanline >= PPU_SCANLINES_PER_FRAME {
-                    scanline = 0;
-                }
-            }
-        }
-        (scanline, dot)
-    }
-
-    fn position_passes_vblank_edge(
-        &self,
-        start_scanline: i16,
-        start_dot: u16,
-        end_scanline: i16,
-        end_dot: u16,
-    ) -> bool {
-        self.position_in_open_closed_range(
-            (VBLANK_START_SCANLINE, 1),
-            (start_scanline, start_dot),
-            (end_scanline, end_dot),
-        )
-    }
-
-    fn position_passes_pre_render_clear_edge(
-        &self,
-        start_scanline: i16,
-        start_dot: u16,
-        end_scanline: i16,
-        end_dot: u16,
-    ) -> bool {
-        self.position_in_open_closed_range(
-            (PRE_RENDER_SCANLINE, 1),
-            (start_scanline, start_dot),
-            (end_scanline, end_dot),
-        )
-    }
-
-    fn position_in_open_closed_range(
-        &self,
-        target: (i16, u16),
-        start: (i16, u16),
-        end: (i16, u16),
-    ) -> bool {
-        let target_index = self.position_index(target.0, target.1);
-        let start_index = self.position_index(start.0, start.1);
-        let mut end_index = self.position_index(end.0, end.1);
-
-        if end_index <= start_index {
-            end_index += self.frame_position_count();
-        }
-
-        let mut target_index = target_index;
-        if target_index <= start_index {
-            target_index += self.frame_position_count();
-        }
-
-        start_index < target_index && target_index <= end_index
-    }
-
-    fn position_index(&self, scanline: i16, dot: u16) -> u32 {
-        scanline as u32 * PPU_DOTS_PER_SCANLINE as u32 + dot as u32
-    }
-
-    fn frame_position_count(&self) -> u32 {
-        PPU_SCANLINES_PER_FRAME as u32 * PPU_DOTS_PER_SCANLINE as u32
+        self.registers.status
     }
 
     fn update_sprite_zero_hit(&mut self, cartridge: &Cartridge) {

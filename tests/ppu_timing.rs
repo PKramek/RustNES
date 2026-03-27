@@ -1,6 +1,10 @@
+mod support;
+
 use RustNES::core::bus::{Bus, CpuBus};
 use RustNES::core::cartridge::load_cartridge_from_bytes;
 use RustNES::core::ppu::STATUS_VBLANK;
+
+use support::console_from_program;
 
 fn mapper0_cartridge() -> RustNES::core::cartridge::Cartridge {
     let mut rom = vec![b'N', b'E', b'S', 0x1A, 1, 1, 0, 0];
@@ -89,4 +93,25 @@ fn frame_ready_latches_at_vblank_until_consumed() {
     assert!(bus.ppu().frame_ready());
     assert!(bus.ppu_mut().take_frame_ready());
     assert!(!bus.ppu().frame_ready());
+}
+
+#[test]
+fn ppustatus_read_occurs_on_expected_bus_phase() {
+    let mut console =
+        console_from_program(&[(0x8000, 0xAD), (0x8001, 0x02), (0x8002, 0x20)], 0x8000);
+
+    advance_cpu_ticks(console.bus_mut(), (260 * 341 + 338) / 3);
+    assert_eq!(console.bus().ppu().scanline(), 260);
+    assert_eq!(console.bus().ppu().dot(), 338);
+
+    console.bus_mut().ppu_mut().set_status(STATUS_VBLANK);
+
+    let record = console
+        .step_instruction()
+        .expect("LDA $2002 should execute");
+
+    assert_eq!(record.operand_addr, Some(0x2002));
+    assert_eq!(record.cycles_used(console.cpu().total_cycles), 4);
+    assert_ne!(console.cpu().a & STATUS_VBLANK, 0);
+    assert_eq!(console.bus().ppu().status() & STATUS_VBLANK, 0);
 }
