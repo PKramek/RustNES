@@ -32,12 +32,18 @@ fn nestest_style_trace_matches_the_checked_in_golden_log() {
     for _ in 0..6 {
         let record = console
             .step_instruction()
-            .expect("trace ROM should execute");
+            .expect("trace program should execute");
         lines.push(format_trace_line(&record));
     }
 
     let actual = lines.join("\n") + "\n";
-    let expected =
-        std::fs::read_to_string("tests/roms/nestest.log").expect("golden log should exist");
+    let expected = concat!(
+        "C000  A2 02     LDX #$02                        A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7\n",
+        "C002  A9 80     LDA #$80                        A:00 X:02 Y:00 P:24 SP:FD PPU:  0, 27 CYC:9\n",
+        "C004  95 10     STA $10,X @ 12 = 11             A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 33 CYC:11\n",
+        "C006  B5 10     LDA $10,X @ 12 = 80             A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 45 CYC:15\n",
+        "C008  D0 02     BNE $C00C                       A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 57 CYC:19\n",
+        "C00C  00        BRK                             A:80 X:02 Y:00 P:A4 SP:FD PPU:  0, 66 CYC:22\n",
+    );
     assert_eq!(actual, expected);
 }

@@ -25,6 +25,7 @@ fn advance_to_vblank(bus: &mut Bus) {
     for _ in 0..((241 * 341 + 1) / 3) {
         bus.tick();
     }
+    bus.refresh_ppu_framebuffer();
 }
 
 #[test]
@@ -66,6 +67,58 @@ fn scroll_writes_shift_the_rendered_viewport() {
 
     let framebuffer = bus.ppu().framebuffer();
     assert_eq!(&framebuffer[0..8], &[0x22; 8]);
+}
+
+#[test]
+fn mid_scanline_scroll_writes_only_affect_pixels_after_the_write_dot() {
+    let mut bus = Bus::new(chr_ram_cartridge());
+
+    write_ppu(&mut bus, 0x0010, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x0018, &[0x00; 8]);
+    write_ppu(&mut bus, 0x0020, &[0x00; 8]);
+    write_ppu(&mut bus, 0x0028, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x0030, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x0038, &[0xFF; 8]);
+    write_ppu(&mut bus, 0x2000, &[0x01, 0x02, 0x03]);
+    write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
+
+    bus.write(0x2000, 0x00);
+    bus.write(0x2001, 0x08);
+    bus.write(0x2005, 0x00);
+    bus.write(0x2005, 0x00);
+
+    advance_to_vblank(&mut bus);
+    assert!(bus.ppu_mut().take_frame_ready());
+
+    let frame_before_split = bus.ppu().frame();
+    let mut ticks_to_next_frame = 0usize;
+    while bus.ppu().frame() == frame_before_split {
+        bus.tick();
+        ticks_to_next_frame += 1;
+        assert!(
+            ticks_to_next_frame < 10_000,
+            "expected to reach the next frame"
+        );
+    }
+
+    for _ in 0..3 {
+        bus.tick();
+    }
+
+    bus.write(0x2005, 0x08);
+    bus.write(0x2005, 0x00);
+
+    let mut ticks = 0usize;
+    while !bus.ppu().frame_ready() {
+        bus.tick();
+        ticks += 1;
+        assert!(ticks < 30_000, "frame should reach vblank");
+    }
+
+    let framebuffer = bus.ppu().framebuffer();
+    assert_eq!(framebuffer[0], 0x11);
+    assert_eq!(framebuffer[7], 0x11);
+    assert_eq!(framebuffer[12], 0x33);
 }
 
 #[test]

@@ -1,7 +1,10 @@
 use super::{CartridgeError, ChrStorage, InesFlags6, InesRom, Mapper, Mirroring};
 
+const PRG_RAM_SIZE: usize = 0x2000;
+
 pub struct Mapper0 {
     prg_rom: Box<[u8]>,
+    prg_ram: Box<[u8; PRG_RAM_SIZE]>,
     chr: ChrStorage,
     mirroring: Mirroring,
 }
@@ -37,6 +40,7 @@ impl Mapper0 {
 
         Ok(Self {
             prg_rom: image.prg_rom,
+            prg_ram: Box::new([0; PRG_RAM_SIZE]),
             chr: image.chr,
             mirroring: image.header.mirroring,
         })
@@ -46,6 +50,7 @@ impl Mapper0 {
 impl Mapper for Mapper0 {
     fn cpu_read(&self, addr: u16) -> u8 {
         match addr {
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000..=0xFFFF => {
                 let offset = (addr - 0x8000) as usize;
                 let index = if self.prg_rom.len() == 0x4000 {
@@ -59,7 +64,11 @@ impl Mapper for Mapper0 {
         }
     }
 
-    fn cpu_write(&mut self, _addr: u16, _value: u8) {}
+    fn cpu_write(&mut self, addr: u16, value: u8) {
+        if let 0x6000..=0x7FFF = addr {
+            self.prg_ram[(addr - 0x6000) as usize] = value;
+        }
+    }
 
     fn ppu_read(&self, addr: u16) -> u8 {
         match addr {

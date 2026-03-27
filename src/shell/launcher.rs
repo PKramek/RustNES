@@ -23,6 +23,10 @@ impl Launcher {
         self.app.state()
     }
 
+    pub fn into_app(self) -> App {
+        self.app
+    }
+
     pub fn open_path_with_confirmation<F>(
         &mut self,
         path: PathBuf,

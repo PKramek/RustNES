@@ -28,6 +28,7 @@
 Run the same checks locally before opening or updating a pull request:
 
 ```sh
+sh scripts/check-no-real-rom-tests.sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo nextest run --all-targets --all-features
@@ -41,6 +42,7 @@ If behavior changes, add or update tests in the same pull request.
 
 - Keep generated files, local editor settings, and temporary artifacts out of version control.
 - Do not commit planning-only or local AI-assistance files.
+- Do not commit real ROM assets or tests that depend on checked-in or local third-party ROM files. Automated tests must use synthetic fixtures or generated ROM bytes instead.
 - Update documentation when workflows, developer setup, or emulator behavior changes.
 
 ## Commit Quality
