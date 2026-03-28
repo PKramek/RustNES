@@ -82,6 +82,26 @@ cargo nextest run --all-targets --all-features
 
 Committed tests must stay ROM-free. When a test needs a path-based seam, write generated ROM bytes to a temp file through `tests/support` helpers instead of reading from local `roms/` or `nestest/` directories.
 
+## Release Smoke Workflow
+
+Phase 5 desktop-finish work adds a repeatable release smoke path for the desktop product surface.
+
+Run the full release smoke workflow from the repo root with:
+
+```bash
+sh scripts/smoke-release-desktop.sh
+```
+
+The script wraps these exact commands:
+
+```bash
+sh scripts/check-no-real-rom-tests.sh
+cargo build --release
+cargo test --release --test desktop_product --test runtime_view --test shell_diagnostics --test trace_cli
+```
+
+This workflow stays ROM-free and headless-friendly: it uses generated-ROM tests, shell diagnostics, and the release trace CLI suite instead of checked-in game assets or manual GUI launching.
+
 ## CI
 
 The workflow in `.github/workflows/ci.yml` mirrors the local checks and installs the Cargo helper binaries with pinned GitHub Actions.

@@ -1,3 +1,5 @@
+mod support;
+
 use RustNES::core::bus::{Bus, CpuBus};
 use RustNES::core::cartridge::load_cartridge_from_bytes;
 use RustNES::core::ppu::STATUS_SPRITE_ZERO_HIT;
@@ -24,6 +26,26 @@ fn advance_to_vblank(bus: &mut Bus) {
     bus.refresh_ppu_framebuffer();
 }
 
+fn seed_sprite_zero_scene(bus: &mut Bus, sprite_attributes: u8) {
+    write_ppu(bus, 0x0010, &[0xFF; 8]);
+    write_ppu(bus, 0x0018, &[0x00; 8]);
+    write_ppu(bus, 0x0020, &[0xFF; 8]);
+    write_ppu(bus, 0x0028, &[0xFF; 8]);
+    write_ppu(bus, 0x2000 + 32 + 1, &[0x01]);
+    write_ppu(bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
+    write_ppu(bus, 0x3F10, &[0x0F, 0x2A, 0x2B, 0x2C]);
+
+    bus.write(0x2000, 0x00);
+    bus.write(0x2005, 0x00);
+    bus.write(0x2005, 0x00);
+    bus.write(0x2001, 0x18);
+    bus.write(0x2003, 0x00);
+    bus.write(0x2004, 0x07);
+    bus.write(0x2004, 0x02);
+    bus.write(0x2004, sprite_attributes);
+    bus.write(0x2004, 0x08);
+}
+
 #[test]
 fn dma_copies_cpu_page_into_oam() {
     let mut bus = Bus::new(chr_ram_cartridge());
@@ -44,20 +66,7 @@ fn dma_copies_cpu_page_into_oam() {
 fn sprite_zero_hit_is_set_when_sprite_overlaps_opaque_background() {
     let mut bus = Bus::new(chr_ram_cartridge());
 
-    write_ppu(&mut bus, 0x0010, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x0018, &[0x00; 8]);
-    write_ppu(&mut bus, 0x0020, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x0028, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x2000 + 32 + 1, &[0x01]);
-    write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
-    write_ppu(&mut bus, 0x3F10, &[0x0F, 0x2A, 0x2B, 0x2C]);
-
-    bus.write(0x2001, 0x18);
-    bus.write(0x2003, 0x00);
-    bus.write(0x2004, 0x07);
-    bus.write(0x2004, 0x02);
-    bus.write(0x2004, 0x00);
-    bus.write(0x2004, 0x08);
+    seed_sprite_zero_scene(&mut bus, 0x00);
 
     advance_to_vblank(&mut bus);
 
@@ -69,20 +78,7 @@ fn sprite_zero_hit_is_set_when_sprite_overlaps_opaque_background() {
 fn background_priority_keeps_background_visible_but_still_sets_sprite_zero_hit() {
     let mut bus = Bus::new(chr_ram_cartridge());
 
-    write_ppu(&mut bus, 0x0010, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x0018, &[0x00; 8]);
-    write_ppu(&mut bus, 0x0020, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x0028, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x2000 + 32 + 1, &[0x01]);
-    write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
-    write_ppu(&mut bus, 0x3F10, &[0x0F, 0x2A, 0x2B, 0x2C]);
-
-    bus.write(0x2001, 0x18);
-    bus.write(0x2003, 0x00);
-    bus.write(0x2004, 0x07);
-    bus.write(0x2004, 0x02);
-    bus.write(0x2004, 0x20);
-    bus.write(0x2004, 0x08);
+    seed_sprite_zero_scene(&mut bus, 0x20);
 
     advance_to_vblank(&mut bus);
 
@@ -127,20 +123,7 @@ fn lower_oam_index_sprite_wins_when_sprites_overlap() {
 fn sprite_zero_hit_sets_during_visible_scanlines_before_vblank() {
     let mut bus = Bus::new(chr_ram_cartridge());
 
-    write_ppu(&mut bus, 0x0010, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x0018, &[0x00; 8]);
-    write_ppu(&mut bus, 0x0020, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x0028, &[0xFF; 8]);
-    write_ppu(&mut bus, 0x2000 + 32 + 1, &[0x01]);
-    write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
-    write_ppu(&mut bus, 0x3F10, &[0x0F, 0x2A, 0x2B, 0x2C]);
-
-    bus.write(0x2001, 0x18);
-    bus.write(0x2003, 0x00);
-    bus.write(0x2004, 0x07);
-    bus.write(0x2004, 0x02);
-    bus.write(0x2004, 0x00);
-    bus.write(0x2004, 0x08);
+    seed_sprite_zero_scene(&mut bus, 0x00);
 
     for _ in 0..((9 * 341 + 10) / 3) {
         bus.tick();

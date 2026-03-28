@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use super::diagnostics::ShellDiagnostic;
 use super::{LoadRomError, LoadedRom, RuntimeSession, load_rom_from_path};
 
 #[derive(Debug)]
@@ -17,6 +18,12 @@ pub struct LoadFailure {
     pub attempted_path: PathBuf,
     pub error: LoadRomError,
     pub message: String,
+}
+
+impl LoadFailure {
+    pub fn diagnostic(&self) -> ShellDiagnostic {
+        ShellDiagnostic::from_load_failure(self)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
