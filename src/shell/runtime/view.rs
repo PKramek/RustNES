@@ -55,6 +55,8 @@ pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
     let mut presentation_state = default_presentation_state();
     let window = Arc::new(build_window(&event_loop, &session, presentation_state)?);
     let mut pixels = build_pixels(window.clone())?;
+    let mut surface_size = window.inner_size();
+    let mut window_occluded = false;
 
     if let Err(error) = session.start_audio_output() {
         eprintln!("{}", error.diagnostic_message());
@@ -110,6 +112,13 @@ pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
                         WindowEvent::ModifiersChanged(next_modifiers) => {
                             modifiers = next_modifiers.state();
                         }
+                        WindowEvent::Occluded(occluded) => {
+                            window_occluded = occluded;
+                            next_frame_deadline = Instant::now() + FRAME_DURATION;
+                            if !occluded && window_runtime_active(surface_size, window_occluded) {
+                                window.request_redraw();
+                            }
+                        }
                         WindowEvent::RedrawRequested => {
                             let frame = compose_runtime_frame(&session);
                             upload_frame(pixels.frame_mut(), &frame);
@@ -118,17 +127,29 @@ pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
                             }
                         }
                         WindowEvent::Resized(size) => {
+                            surface_size = size;
+                            if !window_runtime_active(surface_size, window_occluded) {
+                                next_frame_deadline = Instant::now() + FRAME_DURATION;
+                                return;
+                            }
+
                             if pixels.resize_surface(size.width, size.height).is_err() {
                                 target.exit();
                                 return;
                             }
 
+                            next_frame_deadline = Instant::now() + FRAME_DURATION;
                             window.request_redraw();
                         }
                         _ => {}
                     }
                 }
                 Event::AboutToWait => {
+                    if !window_runtime_active(surface_size, window_occluded) {
+                        next_frame_deadline = Instant::now() + FRAME_DURATION;
+                        return;
+                    }
+
                     let mut advanced_any_frame = false;
                     let now = Instant::now();
                     let mut catch_up_frames = 0usize;
@@ -259,6 +280,10 @@ fn apply_window_presentation(window: &Window, presentation_state: PresentationSt
     }
 }
 
+fn window_runtime_active(surface_size: PhysicalSize<u32>, window_occluded: bool) -> bool {
+    !window_occluded && surface_size.width > 0 && surface_size.height > 0
+}
+
 #[cfg(target_os = "macos")]
 fn enter_fullscreen(window: &Window) {
     let _ = window.set_simple_fullscreen(true);
@@ -278,6 +303,31 @@ fn exit_fullscreen(window: &Window) {
 #[cfg(not(target_os = "macos"))]
 fn exit_fullscreen(window: &Window) {
     window.set_fullscreen(None);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::window_runtime_active;
+
+    #[test]
+    fn hidden_or_zero_sized_windows_suspend_runtime_ticks() {
+        assert!(window_runtime_active(
+            winit::dpi::PhysicalSize::new(256, 240),
+            false,
+        ));
+        assert!(!window_runtime_active(
+            winit::dpi::PhysicalSize::new(0, 240),
+            false,
+        ));
+        assert!(!window_runtime_active(
+            winit::dpi::PhysicalSize::new(256, 0),
+            false,
+        ));
+        assert!(!window_runtime_active(
+            winit::dpi::PhysicalSize::new(256, 240),
+            true,
+        ));
+    }
 }
 
 fn build_pixels(window: Arc<Window>) -> Result<Pixels<'static>, RuntimeBootstrapError> {
