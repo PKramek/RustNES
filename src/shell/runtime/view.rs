@@ -3,19 +3,24 @@ use std::time::{Duration, Instant};
 
 use pixels::{Error as PixelsError, Pixels, SurfaceTexture};
 use thiserror::Error;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::{EventLoopError, OsError};
 use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::keyboard::PhysicalKey;
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+#[cfg(target_os = "macos")]
+use winit::platform::macos::WindowExtMacOS;
 use winit::window::{Window, WindowBuilder};
 
 use crate::core::ppu::{FRAMEBUFFER_LEN, SCREEN_HEIGHT, SCREEN_WIDTH, write_rgba_frame};
 
+use super::presentation::{
+    PresentationAction, PresentationMode, PresentationState, ScaleMode, apply_presentation_action,
+    base_window_size, default_presentation_state,
+};
 use super::session::RuntimeSession;
 use super::{NesButton, PauseMenuAction, PauseState, RuntimeMenuMode};
 
-const WINDOW_SCALE: f64 = 3.0;
 const FRAME_DURATION: Duration = Duration::from_nanos(1_000_000_000 / 60);
 const MAX_FRAME_CATCH_UP: usize = 3;
 
@@ -47,7 +52,8 @@ impl RuntimeBootstrapError {
 pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
     let event_loop =
         EventLoop::new().map_err(|source| RuntimeBootstrapError::EventLoop { source })?;
-    let window = Arc::new(build_window(&event_loop, &session)?);
+    let mut presentation_state = default_presentation_state();
+    let window = Arc::new(build_window(&event_loop, &session, presentation_state)?);
     let mut pixels = build_pixels(window.clone())?;
 
     if let Err(error) = session.start_audio_output() {
@@ -57,6 +63,7 @@ pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
     let initial_frame = compose_runtime_frame(&session);
     upload_frame(pixels.frame_mut(), &initial_frame);
     let mut next_frame_deadline = Instant::now();
+    let mut modifiers = ModifiersState::default();
 
     event_loop
         .run(move |event, target| {
@@ -73,6 +80,18 @@ pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
                                 let preferences_before = session.preferences();
                                 let debug_before = session.debug_overlay_visible();
 
+                                if let Some(action) = presentation_action_for_key(
+                                    key,
+                                    modifiers,
+                                    event.state == ElementState::Pressed,
+                                    event.repeat,
+                                ) {
+                                    apply_presentation_action(&mut presentation_state, action);
+                                    apply_window_presentation(&window, presentation_state);
+                                    window.request_redraw();
+                                    return;
+                                }
+
                                 let _ = session.handle_runtime_key(
                                     key,
                                     event.state == ElementState::Pressed,
@@ -88,12 +107,23 @@ pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
                                 }
                             }
                         }
+                        WindowEvent::ModifiersChanged(next_modifiers) => {
+                            modifiers = next_modifiers.state();
+                        }
                         WindowEvent::RedrawRequested => {
                             let frame = compose_runtime_frame(&session);
                             upload_frame(pixels.frame_mut(), &frame);
                             if pixels.render().is_err() {
                                 target.exit();
                             }
+                        }
+                        WindowEvent::Resized(size) => {
+                            if pixels.resize_surface(size.width, size.height).is_err() {
+                                target.exit();
+                                return;
+                            }
+
+                            window.request_redraw();
                         }
                         _ => {}
                     }
@@ -150,16 +180,104 @@ pub fn run(mut session: RuntimeSession) -> Result<(), RuntimeBootstrapError> {
 fn build_window(
     event_loop: &EventLoop<()>,
     session: &RuntimeSession,
+    presentation_state: PresentationState,
 ) -> Result<Window, RuntimeBootstrapError> {
+    let initial_size = base_window_size(presentation_state.window_scale);
     WindowBuilder::new()
         .with_title(runtime_title(session))
-        .with_resizable(false)
+        .with_resizable(true)
         .with_inner_size(LogicalSize::new(
-            SCREEN_WIDTH as f64 * WINDOW_SCALE,
-            SCREEN_HEIGHT as f64 * WINDOW_SCALE,
+            initial_size.width as f64,
+            initial_size.height as f64,
         ))
+        .with_min_inner_size(LogicalSize::new(SCREEN_WIDTH as f64, SCREEN_HEIGHT as f64))
         .build(event_loop)
         .map_err(|source| RuntimeBootstrapError::Window { source })
+}
+
+pub fn presentation_action_for_key(
+    key: KeyCode,
+    modifiers: ModifiersState,
+    pressed: bool,
+    repeat: bool,
+) -> Option<PresentationAction> {
+    if !pressed || repeat {
+        return None;
+    }
+
+    match key {
+        KeyCode::Enter | KeyCode::NumpadEnter if modifiers.super_key() => {
+            Some(PresentationAction::ToggleFullscreen)
+        }
+        KeyCode::Enter | KeyCode::NumpadEnter if modifiers.alt_key() => {
+            Some(PresentationAction::ToggleFullscreen)
+        }
+        KeyCode::F11 => Some(PresentationAction::ToggleFullscreen),
+        KeyCode::F10 => Some(PresentationAction::ToggleScaleMode),
+        _ => None,
+    }
+}
+
+pub fn window_size_for_presentation(
+    presentation_state: PresentationState,
+    available_size: PhysicalSize<u32>,
+) -> PhysicalSize<u32> {
+    let min_width = SCREEN_WIDTH as u32;
+    let min_height = SCREEN_HEIGHT as u32;
+
+    match presentation_state.scale_mode {
+        ScaleMode::Integer => {
+            let width_multiple = (available_size.width / min_width).max(1);
+            let height_multiple = (available_size.height / min_height).max(1);
+            let multiplier = width_multiple.min(height_multiple).max(1);
+            PhysicalSize::new(min_width * multiplier, min_height * multiplier)
+        }
+        ScaleMode::FitWindow => {
+            let max_width = available_size.width.max(min_width);
+            let max_height = available_size.height.max(min_height);
+            let width_by_height = max_height.saturating_mul(min_width) / min_height;
+            if width_by_height <= max_width {
+                PhysicalSize::new(width_by_height.max(min_width), max_height)
+            } else {
+                let height_by_width = max_width.saturating_mul(min_height) / min_width;
+                PhysicalSize::new(max_width, height_by_width.max(min_height))
+            }
+        }
+    }
+}
+
+fn apply_window_presentation(window: &Window, presentation_state: PresentationState) {
+    match presentation_state.mode {
+        PresentationMode::Windowed => {
+            exit_fullscreen(window);
+            let target_size = window_size_for_presentation(presentation_state, window.inner_size());
+            let _ = window.request_inner_size(target_size);
+        }
+        PresentationMode::FullscreenBorderless => {
+            enter_fullscreen(window);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn enter_fullscreen(window: &Window) {
+    let _ = window.set_simple_fullscreen(true);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn enter_fullscreen(window: &Window) {
+    window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+}
+
+#[cfg(target_os = "macos")]
+fn exit_fullscreen(window: &Window) {
+    let _ = window.set_simple_fullscreen(false);
+    window.set_fullscreen(None);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn exit_fullscreen(window: &Window) {
+    window.set_fullscreen(None);
 }
 
 fn build_pixels(window: Arc<Window>) -> Result<Pixels<'static>, RuntimeBootstrapError> {

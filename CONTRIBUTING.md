@@ -36,6 +36,14 @@ cargo deny check
 cargo machete
 ```
 
+For desktop or shell changes, also run the release smoke workflow:
+
+```sh
+sh scripts/smoke-release-desktop.sh
+```
+
+That release path stays ROM-free by relying on generated-ROM tests and shell diagnostics rather than checked-in game assets.
+
 If behavior changes, add or update tests in the same pull request.
 
 ## Repository Hygiene

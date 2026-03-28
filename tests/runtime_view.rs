@@ -3,7 +3,12 @@ mod support;
 use std::path::PathBuf;
 
 use RustNES::core::cartridge::load_cartridge_from_bytes;
-use RustNES::shell::{LoadedRom, RuntimeMenuMode, RuntimeSession, compose_runtime_frame};
+use RustNES::shell::{
+    LoadedRom, PresentationAction, PresentationMode, RuntimeMenuMode, RuntimeSession, ScaleMode,
+    apply_presentation_action, compose_runtime_frame, default_presentation_state,
+    presentation_action_for_key, window_size_for_presentation,
+};
+use winit::keyboard::{KeyCode, ModifiersState};
 
 use support::assertions::{assert_framebuffer_eq, assert_framebuffer_ne};
 
@@ -104,4 +109,55 @@ fn compose_runtime_frame_draws_debug_hud_over_running_frame() {
         &gameplay,
         "debug HUD should alter the composed frame",
     );
+}
+
+#[test]
+fn window_size_for_presentation_snaps_integer_scale() {
+    let state = default_presentation_state();
+    let size = window_size_for_presentation(state, winit::dpi::PhysicalSize::new(930, 700));
+
+    assert_eq!(size.width, 512);
+    assert_eq!(size.height, 480);
+}
+
+#[test]
+fn window_size_for_presentation_preserves_fit_window_aspect() {
+    let mut state = default_presentation_state();
+    apply_presentation_action(&mut state, PresentationAction::ToggleScaleMode);
+    assert_eq!(state.scale_mode, ScaleMode::FitWindow);
+
+    let size = window_size_for_presentation(state, winit::dpi::PhysicalSize::new(900, 600));
+
+    assert_eq!(size, winit::dpi::PhysicalSize::new(640, 600));
+}
+
+#[test]
+fn presentation_hotkeys_map_to_expected_actions() {
+    assert_eq!(
+        presentation_action_for_key(KeyCode::F11, ModifiersState::default(), true, false),
+        Some(PresentationAction::ToggleFullscreen)
+    );
+    assert_eq!(
+        presentation_action_for_key(KeyCode::F10, ModifiersState::default(), true, false),
+        Some(PresentationAction::ToggleScaleMode)
+    );
+    assert_eq!(
+        presentation_action_for_key(KeyCode::F10, ModifiersState::default(), false, false),
+        None
+    );
+
+    let mac_fullscreen_modifiers = ModifiersState::SUPER;
+    assert_eq!(
+        presentation_action_for_key(KeyCode::Enter, mac_fullscreen_modifiers, true, false),
+        Some(PresentationAction::ToggleFullscreen)
+    );
+
+    assert_eq!(
+        presentation_action_for_key(KeyCode::Enter, ModifiersState::ALT, true, false),
+        Some(PresentationAction::ToggleFullscreen)
+    );
+
+    let mut state = default_presentation_state();
+    apply_presentation_action(&mut state, PresentationAction::ToggleFullscreen);
+    assert_eq!(state.mode, PresentationMode::FullscreenBorderless);
 }

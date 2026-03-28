@@ -1,7 +1,10 @@
 mod support;
 
 use RustNES::core::ppu::FRAMEBUFFER_LEN;
-use RustNES::shell::{AppState, BootOptions, Launcher, OpenRomOutcome};
+use RustNES::shell::{
+    AppState, BootOptions, Launcher, OpenRomOutcome, PresentationAction, PresentationMode,
+    ScaleMode, apply_presentation_action, default_presentation_state,
+};
 
 use support::runtime_script::{build_ines_rom, write_rom_fixture};
 use support::unique_temp_path;
@@ -58,7 +61,19 @@ fn launcher_can_recover_from_failed_boot_by_loading_generated_rom() {
 }
 
 #[test]
-#[ignore = "Phase 5 presentation toggles are not implemented yet"]
-fn presentation_toggle_contract_stays_reserved_for_phase_five() {
-    panic!("enable once Phase 5 presentation toggles land");
+fn presentation_toggle_contract_uses_explicit_desktop_state() {
+    let mut state = default_presentation_state();
+
+    assert_eq!(state.mode, PresentationMode::Windowed);
+    assert_eq!(state.scale_mode, ScaleMode::Integer);
+    assert_eq!(state.window_scale, 3);
+
+    apply_presentation_action(&mut state, PresentationAction::ToggleFullscreen);
+    assert_eq!(state.mode, PresentationMode::FullscreenBorderless);
+
+    apply_presentation_action(&mut state, PresentationAction::ToggleScaleMode);
+    assert_eq!(state.scale_mode, ScaleMode::FitWindow);
+
+    apply_presentation_action(&mut state, PresentationAction::ToggleFullscreen);
+    assert_eq!(state.mode, PresentationMode::Windowed);
 }
