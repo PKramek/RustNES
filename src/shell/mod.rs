@@ -1,4 +1,5 @@
 mod app;
+mod diagnostics;
 mod launcher;
 mod load_rom;
 mod runtime;
@@ -10,12 +11,15 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 pub use app::{App, AppState, LoadFailure, LoadedSession, OpenRomOutcome};
+pub use diagnostics::ShellDiagnostic;
 pub use launcher::Launcher;
 pub use load_rom::{LoadRomError, LoadedRom, load_rom_from_path};
 pub use runtime::{
     AudioInitError, InputBindings, InputState, NesButton, PauseMenuAction, PauseState,
-    RuntimeActionError, RuntimeAudio, RuntimeBootstrapError, RuntimeMenuMode, RuntimePreferences,
-    RuntimeSession, compose_runtime_frame,
+    PresentationAction, PresentationMode, PresentationState, RuntimeActionError, RuntimeAudio,
+    RuntimeBootstrapError, RuntimeMenuMode, RuntimePreferences, RuntimeSession, ScaleMode,
+    apply_presentation_action, compose_runtime_frame, default_presentation_state,
+    presentation_action_for_key, window_size_for_presentation,
 };
 pub use trace::TraceOptions;
 
@@ -64,11 +68,14 @@ pub fn run(command: ShellCommand) -> Result<()> {
             match launcher.into_app().into_state() {
                 AppState::Loaded(session) => {
                     if let Err(error) = runtime::run(*session) {
-                        eprintln!("{}", error.diagnostic_message());
+                        eprintln!(
+                            "{}",
+                            ShellDiagnostic::from_runtime_bootstrap_error(&error).render()
+                        );
                     }
                 }
                 AppState::LoadFailed(failure) => {
-                    eprintln!("{}", failure.message);
+                    eprintln!("{}", failure.diagnostic().render());
                 }
                 AppState::Launcher | AppState::Loading(_) => {}
             }
