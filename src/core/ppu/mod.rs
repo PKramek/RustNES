@@ -33,6 +33,7 @@ pub struct ScrollEvent {
     pub scroll_y: u16,
     pub base_nametable: u16,
     pub fine_x_scroll: u8,
+    pub vram_addr: u16,
     pub temp_vram_addr: u16,
 }
 
@@ -69,6 +70,7 @@ impl Default for Ppu {
                 scroll_y: 0,
                 base_nametable: 0,
                 fine_x_scroll: 0,
+                vram_addr: 0,
                 temp_vram_addr: 0,
             }],
             scanline: 0,
@@ -227,6 +229,14 @@ impl Ppu {
 
     pub fn tick(&mut self, cartridge: &Cartridge) {
         self.total_cycles += 1;
+
+        if self.should_skip_odd_frame_cycle() {
+            self.dot = 0;
+            self.scanline = 0;
+            self.frame += 1;
+            return;
+        }
+
         self.dot += 1;
 
         if self.dot >= PPU_DOTS_PER_SCANLINE {
@@ -259,6 +269,17 @@ impl Ppu {
 
     pub fn nmi_line(&self) -> bool {
         self.registers.nmi_enabled() && self.registers.vblank()
+    }
+
+    fn should_skip_odd_frame_cycle(&self) -> bool {
+        self.frame % 2 == 1
+            && self.scanline == PRE_RENDER_SCANLINE
+            && self.dot == 339
+            && self.rendering_enabled()
+    }
+
+    fn rendering_enabled(&self) -> bool {
+        self.registers.mask & 0x18 != 0
     }
 
     fn read_ppudata(&mut self, cartridge: &Cartridge) -> u8 {
@@ -326,6 +347,7 @@ impl Ppu {
             scroll_y: self.scroll_y,
             base_nametable: ((self.registers.ctrl as u16) & 0x03) << 10,
             fine_x_scroll: self.registers.x & 0x07,
+            vram_addr: self.registers.v & 0x3FFF,
             temp_vram_addr: self.registers.t & 0x3FFF,
         }
     }

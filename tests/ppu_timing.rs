@@ -2,7 +2,7 @@ mod support;
 
 use RustNES::core::bus::{Bus, CpuBus};
 use RustNES::core::cartridge::load_cartridge_from_bytes;
-use RustNES::core::ppu::STATUS_VBLANK;
+use RustNES::core::ppu::{Ppu, STATUS_VBLANK};
 
 use support::console_from_program;
 
@@ -93,6 +93,43 @@ fn frame_ready_latches_at_vblank_until_consumed() {
     assert!(bus.ppu().frame_ready());
     assert!(bus.ppu_mut().take_frame_ready());
     assert!(!bus.ppu().frame_ready());
+}
+
+#[test]
+fn odd_frames_skip_one_dot_when_rendering_is_enabled() {
+    let mut cartridge = mapper0_cartridge();
+    let mut ppu = Ppu::default();
+    ppu.cpu_write_register(0x2001, 0x08, &mut cartridge);
+
+    while ppu.frame() == 0 {
+        ppu.tick(&cartridge);
+    }
+    let frame_one_start = ppu.total_cycles();
+
+    while ppu.frame() == 1 {
+        ppu.tick(&cartridge);
+    }
+    let frame_two_start = ppu.total_cycles();
+
+    assert_eq!(frame_two_start - frame_one_start, 262 * 341 - 1);
+}
+
+#[test]
+fn even_frames_keep_full_length_when_rendering_is_disabled() {
+    let cartridge = mapper0_cartridge();
+    let mut ppu = Ppu::default();
+
+    while ppu.frame() == 0 {
+        ppu.tick(&cartridge);
+    }
+    let frame_one_start = ppu.total_cycles();
+
+    while ppu.frame() == 1 {
+        ppu.tick(&cartridge);
+    }
+    let frame_two_start = ppu.total_cycles();
+
+    assert_eq!(frame_two_start - frame_one_start, 262 * 341);
 }
 
 #[test]
