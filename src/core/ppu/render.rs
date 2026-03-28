@@ -100,7 +100,7 @@ pub(crate) fn background_pixel_at(
 fn event_scroll_state(event: ScrollEvent) -> (u16, usize, usize) {
     if event.dot == 0 {
         return (
-            event.base_nametable,
+            event.temp_vram_addr & 0x0C00,
             event.scroll_x as usize,
             event.scroll_y as usize,
         );
@@ -180,6 +180,7 @@ mod tests {
                 scroll_y: 0,
                 base_nametable: 0,
                 fine_x_scroll: 0,
+                vram_addr: 0,
                 temp_vram_addr: 0,
             },
             ScrollEvent {
@@ -189,6 +190,7 @@ mod tests {
                 scroll_y: 0,
                 base_nametable: 0,
                 fine_x_scroll: 0,
+                vram_addr: 0x0001,
                 temp_vram_addr: 0x0001,
             },
         ];
@@ -259,6 +261,7 @@ mod tests {
             scroll_y: 0,
             base_nametable: 0,
             fine_x_scroll: 3,
+            vram_addr: 0x0401,
             temp_vram_addr: 0x0401,
         }];
 
@@ -302,7 +305,53 @@ mod tests {
             scroll_y: 0,
             base_nametable: 0,
             fine_x_scroll: 0,
+            vram_addr: 0x0001,
             temp_vram_addr: 0x0C01,
+        }];
+
+        assert_eq!(
+            background_pixel_at(
+                &memory,
+                &registers,
+                &scroll_events,
+                0,
+                0,
+                0x0000,
+                &cartridge
+            ),
+            (0x22, true)
+        );
+    }
+
+    #[test]
+    fn frame_start_events_use_latched_temp_vram_nametable_over_ctrl_bits() {
+        let mut cartridge = chr_ram_cartridge();
+        let mut memory = PpuMemory::default();
+        let registers = PpuRegisters {
+            mask: MASK_SHOW_BACKGROUND,
+            ctrl: 0x01,
+            ..PpuRegisters::default()
+        };
+
+        memory.write(0x0010, 0xFF, &mut cartridge);
+        memory.write(0x0018, 0x00, &mut cartridge);
+        memory.write(0x0020, 0x00, &mut cartridge);
+        memory.write(0x0028, 0xFF, &mut cartridge);
+        memory.write(0x2000, 0x01, &mut cartridge);
+        memory.write(0x2400, 0x02, &mut cartridge);
+        memory.write(0x3F00, 0x0F, &mut cartridge);
+        memory.write(0x3F01, 0x11, &mut cartridge);
+        memory.write(0x3F02, 0x22, &mut cartridge);
+
+        let scroll_events = [ScrollEvent {
+            scanline: 0,
+            dot: 0,
+            scroll_x: 0,
+            scroll_y: 0,
+            base_nametable: 0x0400,
+            fine_x_scroll: 0,
+            vram_addr: 0x0400,
+            temp_vram_addr: 0x0000,
         }];
 
         assert_eq!(

@@ -39,6 +39,9 @@ fn background_renderer_composes_tiles_and_palettes_into_framebuffer() {
     write_ppu(&mut bus, 0x2000, &[0x00; 0x400]);
     write_ppu(&mut bus, 0x2000, &[0x01, 0x02]);
     write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
+    bus.write(0x2000, 0x00);
+    bus.write(0x2005, 0x00);
+    bus.write(0x2005, 0x00);
     bus.write(0x2001, 0x08);
 
     advance_to_vblank(&mut bus);
@@ -59,6 +62,7 @@ fn scroll_writes_shift_the_rendered_viewport() {
     write_ppu(&mut bus, 0x0028, &[0xFF; 8]);
     write_ppu(&mut bus, 0x2000, &[0x01, 0x02]);
     write_ppu(&mut bus, 0x3F00, &[0x0F, 0x11, 0x22, 0x33]);
+    bus.write(0x2000, 0x00);
     bus.write(0x2001, 0x08);
     bus.write(0x2005, 0x08);
     bus.write(0x2005, 0x00);
