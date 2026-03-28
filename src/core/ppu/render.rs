@@ -364,7 +364,7 @@ mod tests {
                 0x0000,
                 &cartridge
             ),
-            (0x11, true)
+            (0x22, true)
         );
     }
 }
